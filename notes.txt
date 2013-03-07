@@ -1,0 +1,62 @@
+I'd prefer to have a simple library that we can more easily port over to a novel system.  An example (in no way the only example) set of functions for this library might include: 
+
+
+
+
+//cc == cloudcache
+
+typedef enum { CSET, CGET, CDELETE } cccmd_t;
+
+
+struct creq {
+
+    cccmd_t type;
+
+    char key[250];
+
+    char *data;
+
+    u32_t flags, exp_time, bytes;
+
+    struct cresp {
+
+        char *header, *footer;
+
+        int head_sz, foot_sz;
+
+        int errcode; // 0 if successful
+
+    }
+
+};
+
+
+
+
+struct creq *ccache_req_parse(char *cmd, int cmdlen) //this will do the rote parsing of the string into the structure above (leaving some items empty)
+
+int ccache_req_process(struct creq *r) // fill in the rest of the creq struct.  this will probably call
+
+int ccache_get(struct creq *r) // populate data, flags, and bytes
+
+int ccache_set(struct creq *r) // 
+
+
+int ccache_delete(struct creq *r)
+
+
+int ccache_resp_synth(struct creq *req) // this will create the headers and footers to be sent (populating cresp)
+
+int ccache_resp_send(struct creq *req) // actually serialize the headers/footers/and data
+
+int ccache_req_free(struct creq *r) // this might need to decrement reference counts in the actual data itself
+
+
+
+
+I used https://github.com/memcached/memcached/blob/master/doc/protocol.txt to inform this.  You can probably start writing the parsereq function now, but lets have a back and forth on the data-structures you're planning on using to store the actual data.  If you can send the data-structures, we can discuss this further.  Also if you'd like to meet in person outside of class, let me know.
+
+
+
+
+It may seem strange to keep the cresp in the main creq struct.  This avoids an additional memory allocation.  It may seem strange to separate out the synthresp and sendresp function calls.  If the memory for the data is actually stored in a fast, zero-copy message passing piece of memory (cbufs in composite), we want to separate these so that when we move to composite we only need to write send again, not synth.  It might pay off in the end to make creq include a union for each type of request, but I saw so much overlap currently, that I avoided that in this design.  Note that I've separated the "library" part of the functionality out from the "UNIX-specific" parts in this API.  There will be no calls to read/write/epoll, etc... in these functions.  To test them, you'll need to write some code to utilize these functions, having the event notification, etc..., but we will replace that in the eventual cloud system.
