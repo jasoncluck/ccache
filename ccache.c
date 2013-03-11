@@ -63,7 +63,7 @@ int ccache_get(creq_t *creq){
 	creq = (creq_t *) do_lookups(&getpair, dyn_vect);
 	//change the request type back to GET since it was overwritten in the copy
 	creq->type = CGET;
-	
+
 	#if DEBUG
 		printf("\nDEBUG SECTION OF GET\n");
 		printf("type: %i\n", creq->type);
@@ -93,8 +93,6 @@ int ccache_set(creq_t *creq){
 	strcpy(creq->data, temp_data);
 	/* Copy over the data input using memcpy since we know how many bytes it is */
 	//memcpy(&creq->data, &temp_data, creq->bytes);
-
-	printf("Data is: %s\n", creq->data);
 	
 	/* Get the hash result of the key */
 	long hashedkey = hash(creq->key);
@@ -107,10 +105,10 @@ int ccache_set(creq_t *creq){
 	//now insert the pair into the cvect
 	//if this returns false, we have a collision so resolve it using the linked list data structure
 	creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
-	assert(!creq->resp.errcode);
+	assert(!creq->resp.errcode); //if no errors: creq->resp.errcode == 0;
 
-	//Release Lock
-		//if no errors: creq->resp.errcode = 0;
+	//Release Lock goes here
+	
 
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
