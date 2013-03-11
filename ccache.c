@@ -1,5 +1,51 @@
 #include "ccache.h"
 
+#define DEBUG 0
+
+/* globals */
+struct pair pairs[1<<10];
+cvect_t *dyn_vect;
+int pairs_counter;
+
+/* function to see if an id is already in a pair */
+int in_pairs(struct pair *ps, int len, long id)
+{
+	for (; len >= 0 ; len--) {
+		if (ps[len].id == id) return 1;
+	}
+	return 0;
+}
+
+/* I separate this out so that we can easily confirm that the compiler
+ * is doing the proper optimizations. */
+void *do_lookups(struct pair *ps, cvect_t *v)
+{
+	return cvect_lookup(v, ps->id);	
+}
+
+/* Constructor */
+cvect_t *ccache_init(void){
+	dyn_vect = cvect_alloc();
+	assert(dyn_vect);
+	cvect_init(dyn_vect);
+	return dyn_vect;
+}
+
+
+/* Hashing function: Takes in an value and produces a key for that value to be mapped to. Key < 2^20 due to cvect contraints.
+Hashing function is djb: http://www.cse.yorku.ca/~oz/hash.html*/
+long hash(char *str){
+	unsigned long hash = 5381;
+    int c;
+
+    while ((c = *str++)){
+        hash = ((hash << 5) + hash) + c; /* hash * 33 + c */
+    }
+    //modulo for cvect
+    hash %= CVECT_MAX_ID;
+    return hash;
+}
+
 
 /* The Following three funcitons populate the data. Initial parsing as already occurred */
 int ccache_get(creq_t *creq){
@@ -8,10 +54,30 @@ int ccache_get(creq_t *creq){
 
 	//TODO: Get the item from the hash table with the key - then overwrite creq with all the data
 	//creq = hashtable.get(creq->key);
+	//create a new pair and put the key in it, the cvect call will fill in the value
+	struct pair getpair;
+	getpair.id = hash(creq->key);	
+	//now typecast the void pointer returned by the cvect
+	//TODO:shouldn't need to lock here, just reading but double check this
+
+	creq = (creq_t *) do_lookups(&getpair, dyn_vect);
+	//change the request type back to GET since it was overwritten in the copy
+	creq->type = CGET;
 	
-	
+	#if DEBUG
+		printf("\nDEBUG SECTION OF GET\n");
+		printf("type: %i\n", creq->type);
+		printf("key: %s\n", creq->key);
+		printf("flags: %i\n", creq->flags);
+		printf("exp_time: %i\n", creq->exp_time);
+		printf("bytes: %i\n", creq->bytes);
+		printf("data: %s\n", creq->data);
+		printf("END GET DEBUG\n\n");
+	#endif /* DEBUG */
+
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
+	
 	return 0;
 }
 
@@ -24,17 +90,31 @@ int ccache_set(creq_t *creq){
 		printf("Input error - quitting");
 		exit(1);
 	}
-	//strcpy(creq->data, temp_data);
+	strcpy(creq->data, temp_data);
 	/* Copy over the data input using memcpy since we know how many bytes it is */
-	memcpy(&creq->data, &temp_data, creq->bytes);
+	//memcpy(&creq->data, &temp_data, creq->bytes);
 
 	printf("Data is: %s\n", creq->data);
 	
+	/* Get the hash result of the key */
+	long hashedkey = hash(creq->key);
 	//TODO: Actually store the data here in some type of data structure
-	creq->resp.errcode = 0;
+	//Lock goes here before adding data to the cvect - needed for cvect_counter and dyn_vect
+	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
+	pairs[pairs_counter].val = malloc(sizeof(creq_t) + creq->bytes); //malloc space for the creq and data to be stored
+	memcpy(&pairs[pairs_counter].val, &creq, sizeof(creq_t) + creq->bytes); //store the entire creq in the cvect
+
+	//now insert the pair into the cvect
+	//if this returns false, we have a collision so resolve it using the linked list data structure
+	creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+	assert(!creq->resp.errcode);
+
+	//Release Lock
+		//if no errors: creq->resp.errcode = 0;
 
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
+	
 	return 0;
 
 }
@@ -43,6 +123,7 @@ int ccache_delete(creq_t *creq){
 	//search for creq->key in the hash table, if it exists delete it
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
+	ccache_req_free(creq);
 	return 0;
 }
 
@@ -63,6 +144,7 @@ creq_t *ccache_req_parse(char *cmd, int cmdlen){
 		
 		/* first find out what command the first token is */
 		if(counter == 0){
+
 			if(strcmp(pch, "get") == 0) creq->type = CGET;
 			if(strcmp(pch, "set") == 0) creq->type = CSET;
 			if(strcmp(pch, "delete") == 0) creq->type = CDELETE;
@@ -107,9 +189,32 @@ creq_t *ccache_req_parse(char *cmd, int cmdlen){
 		//TODO: Now call ccache_req_process(creq_t *r) to fill in the data portion and the rest of the struct
 	}
 
+	/* Debug info */
+	#if DEBUG
+	switch(creq->type){
+		case CGET:
+			printf("type: %i\n", creq->type);
+			printf("key: %s\n", creq->key);
+			break;	
+		case CSET:
+			printf("type: %i\n", creq->type);
+			printf("key: %s\n", creq->key);
+			printf("flags: %i\n", creq->flags);
+			printf("exp_time: %i\n", creq->exp_time);
+			printf("bytes: %i\n", creq->bytes);
+			break;
+		case CDELETE:
+			printf("type: %i\n", creq->type);
+			printf("key: %s\n", creq->key);
+			break;
+	}
+	#endif /* DEBUG */
+	
+
 	/* Now that the tokens are done - continue the processing by calling the respective functions */
-	if(creq->type == CGET){ 
+	if(creq->type == CGET){
 		ccache_get(creq);
+		//This is definitely the last GET to be processed regardless of # of input tokens so send END
 		printf("END\r\n");
 	}
 	else if(creq->type == CSET) {
@@ -118,14 +223,8 @@ creq_t *ccache_req_parse(char *cmd, int cmdlen){
 	else if(creq->type == CDELETE){ 
 		ccache_delete(creq);
 	}
-	
 
-	/* Debug stuff */
-	printf("type: %i\n", creq->type);
-	printf("key: %s\n", creq->key);
-	printf("flags: %i\n", creq->flags);
-	printf("exp_time: %i\n", creq->exp_time);
-	printf("bytes: %i\n", creq->bytes);
+	printf("\n\n");
 
 	return creq;
 }
@@ -146,7 +245,7 @@ int ccache_resp_synth(creq_t *creq){
 			creq->resp.header = (char * ) malloc(1<<8);
 			creq->resp.footer = (char * ) malloc(creq->bytes);
 			creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
-			creq->resp.foot_sz = sprintf(creq->resp.footer, "%s", creq->data);
+			creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
 			break;
 		case CDELETE:
 			creq->resp.header = (char * ) malloc(16);	
@@ -175,4 +274,9 @@ int ccache_req_free(creq_t *creq){
 	free(creq);
 	return 0;
 }
+
+void cvect_struct_free(cvect_t *dyn_vect){
+	cvect_free(dyn_vect);
+}
+
 
