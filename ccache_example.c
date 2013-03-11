@@ -22,8 +22,11 @@ int main(){
 	char str3[] = "get foobar alice";
 	ccache_req_parse(str3, strlen(str3));
 
-	char str4[] = "get alice";
+	char str4[] = "delete alice";
 	ccache_req_parse(str4, strlen(str4));
+
+	char str5[] = "get alice";
+	ccache_req_parse(str5, strlen(str5));
 
 	// char str3[] = "delete foobar";
 	// ccache_req_parse(str3, strlen(str3));

@@ -49,7 +49,7 @@ long hash(char *str){
 
 /* The Following three funcitons populate the data. Initial parsing as already occurred */
 int ccache_get(creq_t *creq){
-	/* Each item sent by the server will look like: VALUE <key> <flags> <bytes> [<cas unique>]\r\n
+	/*da Each item sent by the server will look like: VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 <data block>\r\n */
 
 	//TODO: Get the item from the hash table with the key - then overwrite creq with all the data
@@ -118,10 +118,18 @@ int ccache_set(creq_t *creq){
 }
 
 int ccache_delete(creq_t *creq){
+
+	struct pair deletepair;
+	deletepair.id = hash(creq->key);	
+	
+	//add lock here
+	assert(!cvect_del(dyn_vect, deletepair.id));
+	//release lock
 	//search for creq->key in the hash table, if it exists delete it
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
 	ccache_req_free(creq);
+
 	return 0;
 }
 
