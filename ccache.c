@@ -59,8 +59,16 @@ int ccache_get(creq_t *creq){
 	getpair.id = hash(creq->key);	
 	//now typecast the void pointer returned by the cvect
 	//TODO:shouldn't need to lock here, just reading but double check this
-
-	creq = (creq_t *) do_lookups(&getpair, dyn_vect);
+	void * lookup_result;
+	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
+		creq = (creq_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
+		creq->resp.errcode = 0;
+	}
+	else{
+		//Data was not found so set the error code flag and nothing will be sent back
+		creq->resp.errcode = -1;
+	}
+	 
 	//change the request type back to GET since it was overwritten in the copy
 	creq->type = CGET;
 
@@ -247,11 +255,15 @@ int ccache_resp_synth(creq_t *creq){
 			break;
 		case CGET:
 			// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
-			// Footer should be the data block 
+			// Footer should be the data block
+			
 			creq->resp.header = (char * ) malloc(1<<8);
 			creq->resp.footer = (char * ) malloc(creq->bytes);
-			creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
-			creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
+			//only populate the fields if no errors were encountered
+			if(!creq->resp.errcode){
+				creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
+				creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
+			}
 			break;
 		case CDELETE:
 			creq->resp.header = (char * ) malloc(16);	
