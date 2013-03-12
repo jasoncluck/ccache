@@ -61,17 +61,22 @@ int ccache_get(creq_t *creq){
 	void * lookup_result;
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		node_t *head = (node_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
-		do{
+		creq->resp.errcode = 0;
+		while(1){
 			//if the keys are equal, we have the element so stop iteration
 			if(!(strcmp(head->creq->key, creq->key))){
-				creq = head->creq; //overwrite the passed in creq with the data from the cvect
-				creq->type = CGET;
-				creq->resp.errcode = 0;
+				creq = head->creq; //overwrite the passed in creq with the data from the head node's cvect
+				creq->type = CGET; //just set the type back to GET
 				break;
 			}
-		}while((head = head->next) != NULL);
+			else if(head->next == NULL){
+				creq->resp.errcode = -1;
+				break;
+			} 
+			else head = head->next;
+		}
 		//if head->creq->key != creq->key, we didn't find the value so return an error
-		if(strcmp(head->creq->key, creq->key)) creq->resp.errcode = -1;
+		
 	}
 	else{
 		//Data was not found so set the error code flag and nothing will be sent back
@@ -122,15 +127,16 @@ int ccache_set(creq_t *creq){
 
 	/* check to see if this key already exists, if it doesn't: add it. If it does exist, resolve linked node collision */
 	void *lookup_result;
-
 	if((lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect)) != 0){
 		head = (node_t *) lookup_result; //if non-zero we can now typecast
-		do{
+		while(1){
 			if(!(strcmp(insert_node->creq->key, head->creq->key))) {
 				creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
 			}
-			
-		} while((head = head->next) != NULL);
+			if(head->next == NULL) break;
+			else head = head->next;
+
+		}
 		//at this point head.next == null so set head.next to the insert node
 		head->next = insert_node;
 	}
@@ -140,7 +146,7 @@ int ccache_set(creq_t *creq){
 	}	
 
 	assert(!creq->resp.errcode); //if no errors: creq->resp.errcode == 0;
-
+	pairs_counter++;
 	//Release Lock goes here
 	
 

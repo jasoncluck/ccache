@@ -22,11 +22,20 @@ int main(){
 	char str3[] = "get foobar";
 	ccache_req_parse(str3, strlen(str3));
 
+	char str7[] = "set buff 400 03 20";
+	ccache_req_parse(str7, strlen(str7));
+
+	char str4[] = "set baz 300 02 40";
+	ccache_req_parse(str4, strlen(str4));
+
 	//char str4[] = "delete alice";
 	//ccache_req_parse(str4, strlen(str4));
 
-	char str5[] = "get fake";
+	char str5[] = "get alice";
 	ccache_req_parse(str5, strlen(str5));
+
+	char str6[] = "get buff alice foobar baz";
+	ccache_req_parse(str6, strlen(str6));
 
 	// char str3[] = "delete foobar";
 	// ccache_req_parse(str3, strlen(str3));
