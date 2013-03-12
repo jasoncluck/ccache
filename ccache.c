@@ -55,8 +55,9 @@ int ccache_get(creq_t *creq){
 	
 	//create a new pair and put the key in it, the cvect call will fill in the value
 	struct pair getpair;
-	getpair.id = hash(creq->key);	
-	//now typecast the void pointer returned by the cvect
+	long hashedkey = hash(creq->key);
+	getpair.id = hashedkey;
+
 	//TODO:shouldn't need to lock here, just reading but double check this
 	void * lookup_result;
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
@@ -65,8 +66,8 @@ int ccache_get(creq_t *creq){
 		while(1){
 			//if the keys are equal, we have the element so stop iteration
 			if(!(strcmp(head->creq->key, creq->key))){
-				creq = head->creq; //overwrite the passed in creq with the data from the head node's cvect
-				creq->type = CGET; //just set the type back to GET
+				creq = head->creq; 
+				creq->type = CGET; //set command back to GET
 				break;
 			}
 			else if(head->next == NULL){
@@ -75,8 +76,6 @@ int ccache_get(creq_t *creq){
 			} 
 			else head = head->next;
 		}
-		//if head->creq->key != creq->key, we didn't find the value so return an error
-		
 	}
 	else{
 		//Data was not found so set the error code flag and nothing will be sent back
@@ -160,11 +159,52 @@ int ccache_set(creq_t *creq){
 int ccache_delete(creq_t *creq){
 
 	struct pair deletepair;
-	deletepair.id = hash(creq->key);	
+	long hashedkey = hash(creq->key);
+	deletepair.id = hashedkey;	
 	
-	//add lock here
-	assert(!cvect_del(dyn_vect, deletepair.id));
-	//release lock
+	void * lookup_result;
+	//lock here
+	if((lookup_result = do_lookups(&deletepair, dyn_vect)) != 0){
+		node_t *head = (node_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
+		creq->resp.errcode = 0;
+		
+		//check the first node
+		if(!(strcmp(head->creq->key, creq->key))){
+			//if there is nothing after the first node, just delete the whole cvect bucket
+			if(head->next == NULL){
+				creq->resp.errcode = cvect_del(dyn_vect, deletepair.id);	
+			} 
+			else{
+				//if there is another node after the first one - have to change the cvect pointer. also get rid of head's data
+				
+				memcpy(head, head->next, sizeof(node_t));
+				free(head->next);
+
+			}			
+		}
+		else{
+			while(1){
+				if(head->next != NULL && !strcmp(head->next->creq->key, creq->key)){
+					free(head->next); //garbage collect the node's references
+					if(head->next->next != NULL) head->next = head->next->next; //change the pointers
+					break;
+				}
+				if(head->next != NULL) head = head->next;
+				else{
+					creq->resp.errcode = -2;
+					break;
+				}
+
+			}
+
+		}
+	}		
+	//unlock here
+	else{
+		//Data not found in cvect, return error
+		creq->resp.errcode = -1;
+	}	
+	
 	//search for creq->key in the hash table, if it exists delete it
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
