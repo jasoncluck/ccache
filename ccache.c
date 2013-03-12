@@ -47,13 +47,12 @@ long hash(char *str){
 }
 
 
-/* The Following three funcitons populate the data. Initial parsing as already occurred */
+/* The Following three functons populate the data. Initial parsing as already occurred */
 int ccache_get(creq_t *creq){
-	/*da Each item sent by the server will look like: VALUE <key> <flags> <bytes> [<cas unique>]\r\n
+	/* Each item sent by the server will look like: VALUE <key> <flags> <bytes> [<cas unique>]\r\n
 <data block>\r\n */
 
-	//TODO: Get the item from the hash table with the key - then overwrite creq with all the data
-	//creq = hashtable.get(creq->key);
+	
 	//create a new pair and put the key in it, the cvect call will fill in the value
 	struct pair getpair;
 	getpair.id = hash(creq->key);	
@@ -61,16 +60,23 @@ int ccache_get(creq_t *creq){
 	//TODO:shouldn't need to lock here, just reading but double check this
 	void * lookup_result;
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
-		creq = (creq_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
-		creq->resp.errcode = 0;
+		node_t *head = (node_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
+		do{
+			//if the keys are equal, we have the element so stop iteration
+			if(!(strcmp(head->creq->key, creq->key))){
+				creq = head->creq; //overwrite the passed in creq with the data from the cvect
+				creq->type = CGET;
+				creq->resp.errcode = 0;
+				break;
+			}
+		}while((head = head->next) != NULL);
+		//if head->creq->key != creq->key, we didn't find the value so return an error
+		if(strcmp(head->creq->key, creq->key)) creq->resp.errcode = -1;
 	}
 	else{
 		//Data was not found so set the error code flag and nothing will be sent back
 		creq->resp.errcode = -1;
-	}
-	 
-	//change the request type back to GET since it was overwritten in the copy
-	creq->type = CGET;
+	}	
 
 	#if DEBUG
 		printf("\nDEBUG SECTION OF GET\n");
@@ -99,20 +105,40 @@ int ccache_set(creq_t *creq){
 		exit(1);
 	}
 	strcpy(creq->data, temp_data);
-	/* Copy over the data input using memcpy since we know how many bytes it is */
-	//memcpy(&creq->data, &temp_data, creq->bytes);
 	
 	/* Get the hash result of the key */
 	long hashedkey = hash(creq->key);
-	//TODO: Actually store the data here in some type of data structure
+
+	//TODO: Store the data here in some type of data structure
 	//Lock goes here before adding data to the cvect - needed for cvect_counter and dyn_vect
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
-	pairs[pairs_counter].val = malloc(sizeof(creq_t) + creq->bytes); //malloc space for the creq and data to be stored
-	memcpy(&pairs[pairs_counter].val, &creq, sizeof(creq_t) + creq->bytes); //store the entire creq in the cvect
+	pairs[pairs_counter].val = malloc(sizeof(node_t)); //malloc space for the pointer to the node object
+	/* create the node, add the data to the node, and store it in the cvect */
+	node_t *insert_node = (node_t *) malloc(sizeof(node_t));
+	node_t *head = (node_t *) malloc(sizeof(node_t));
+	insert_node->creq = creq;
+	insert_node->next = NULL;
+	memcpy(&pairs[pairs_counter].val, &insert_node, sizeof(node_t)); //store the entire creq in the cvect
 
-	//now insert the pair into the cvect
-	//if this returns false, we have a collision so resolve it using the linked list data structure
-	creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+	/* check to see if this key already exists, if it doesn't: add it. If it does exist, resolve linked node collision */
+	void *lookup_result;
+
+	if((lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect)) != 0){
+		head = (node_t *) lookup_result; //if non-zero we can now typecast
+		do{
+			if(!(strcmp(insert_node->creq->key, head->creq->key))) {
+				creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+			}
+			
+		} while((head = head->next) != NULL);
+		//at this point head.next == null so set head.next to the insert node
+		head->next = insert_node;
+	}
+	else{
+		//add the pair to the cvect
+		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+	}	
+
 	assert(!creq->resp.errcode); //if no errors: creq->resp.errcode == 0;
 
 	//Release Lock goes here

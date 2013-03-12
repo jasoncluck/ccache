@@ -16,6 +16,9 @@
 #define LINUX_TEST
 #include "cvect.h"
 
+/* linked list */
+#include "llnode.h"
+
 
 struct pair {
 	long id;
