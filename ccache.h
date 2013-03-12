@@ -10,14 +10,29 @@
 #include <assert.h>
 #include <stdint.h>
 #include <string.h>
+#include <pthread.h>
+#include <semaphore.h>
+
+/* ccache native */
+#define MAX_CMD_SZ (1<<10)
 
 /* cvect stuff */
 #define COS_LINUX_ENV
 #define LINUX_TEST
 #include "cvect.h"
 
+/* Concurrency */
+#define MAX_CONCURRENCY 4
+
 /* linked list */
 #include "llnode.h"
+
+/* Command buffer */
+#include "circBuffer.h"
+#define BUFFER_LENGTH 256
+
+/* Turn debugging on */
+#define DEBUG 0
 
 
 struct pair {
@@ -53,7 +68,7 @@ Hashing function is djb: http://www.cse.yorku.ca/~oz/hash.html*/
 long hash(char *str);
 
 /* Function to parse the string and put it into the structure above */
-creq_t *ccache_req_parse(char *cmd, int cmdlen);
+creq_t *ccache_req_parse(char *cmd);
 
 
 /* Populate the data, flags, and bytes */
@@ -75,3 +90,15 @@ int ccache_req_free(creq_t *creq);
 
 /* Function to free up the cvect data structure - only called at the end of main */
 void cvect_struct_free(cvect_t *dyn_vect);
+
+
+/* cvect function */
+int in_pairs(struct pair *ps, int len, long id);
+
+void *do_lookups(struct pair *ps, cvect_t *v);
+
+/* concurrency */
+void *thread_start(void * thread_num);
+
+/* add the request from the main thread to a buffer for a worker thread to pick up */
+int add_req_to_buffer(char * str);

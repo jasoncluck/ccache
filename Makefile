@@ -1,12 +1,13 @@
-OBJS=ccache.o ccache_example.o
+OBJS=ccache.o ccache_example.o circBuffer.o
+CFLAGS=-g -I. -Wall -Wextra -pthread -Wno-unused-function
+BIN=ccache
 CC=gcc
-CFLAGS=-O3 -Wall -Wno-unused-function
 
-ccache.exe: $(OBJS)
-	$(CC) $(OBJS)
+%.o:%.c
+	$(CC) $(CFLAGS) $(DEFINES) -o $@ -c $<
 
-.c.o:
-	$(CC) -c $(CFLAGS) $<
+$(BIN): $(OBJS)
+	$(CC) $(CFLAGS) $(DEFINES) -o $(BIN) $^
 
 clean:
-	\rm *.o
+	rm $(BIN) $(OBJS)
