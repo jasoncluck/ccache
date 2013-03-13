@@ -22,7 +22,7 @@
 #include "cvect.h"
 
 /* Concurrency */
-#define MAX_CONCURRENCY 4
+#define MAX_CONCURRENCY 1
 
 /* linked list */
 #include "llnode.h"
@@ -55,7 +55,7 @@ typedef struct creq {
 	struct cresp { 
 		char *header, *footer;
 		int head_sz, foot_sz;
-		int errcode; //returns 0 if successful
+		int errcode; //0 for successful, -1 for normal errors like element not found, 1 for command errors, 2 for client errors, 3 for server errors
 	} resp;
 
 } creq_t;
@@ -97,7 +97,7 @@ int in_pairs(struct pair *ps, int len, long id);
 
 void *do_lookups(struct pair *ps, cvect_t *v);
 
-/* concurrency */
+/* function for threads */
 void *thread_start(void * thread_num);
 
 /* add the request from the main thread to a buffer for a worker thread to pick up */

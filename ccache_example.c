@@ -3,6 +3,7 @@
 #include <malloc.h>
 #include <string.h>
 #include <assert.h>
+#include <unistd.h>
 
 #include "ccache.h"
 
@@ -17,15 +18,17 @@ int main(){
 	while(1){
 		/* Get a command */
 		fgets(cmd, MAX_CMD_SZ, stdin);
-		//remove any trailing newline character
-		cmd[strlen(cmd)-1] = '\0';
+		
+		cmd[strlen(cmd)-1] = '\0'; //remove any trailing newline character
+
+		//can quit with 'q'
 		if(!(strcmp(cmd, "q"))) {
 			printf("Quitting\n");
 			break;
 		}
 
 		add_req_to_buffer(cmd);
-		sleep(1);
+		sleep(1); //allow the workers to go
 	}
 
 	free(cmd);

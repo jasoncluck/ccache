@@ -1,5 +1,5 @@
 /* linked list node declaration.  Might use sentinel nodes later */
-
+#pragma once 
 #include <stdio.h>
 
 #include "ccache.h" /* for struct creq */

@@ -21,26 +21,23 @@ sem_t buffer_sem;
 
 
 
-/* function for the main thread to pass inputs over to threads */
+/* 	Function for the main thread to pass inputs over to threads. 
+	Worker threads will block until a semaphore is incremented by the main threads.
+	They will then pop the request off the circular buffer and take care of it*/
 void *thread_start(void * thread_num){
-	//while there is something to do... ie: semaphore isn't 0
-	//lock the request structure
-	//pop off the most recent request
-	//unlock the request structure
-	//start parsing command
 	while(1){
-		//printf("thread %i here\n", (int) thread_num);
-		sem_wait(&buffer_sem); //will block until semaphore is non-negative
+		sem_wait(&buffer_sem); 
 		pthread_mutex_lock(&buffer_mutex);
 		char * cmd = pop(cb);
 		pthread_mutex_unlock(&buffer_mutex);
 
 		ccache_req_parse(cmd);
 	}
-	//should never reach here - threads don't join
+	printf("This code shouldn't be executing! Quitting\n");
+	exit(1);
 }
 
-/* 	Function for adding a request to the circular buffer.
+/* 	Adding a request to the circular buffer.
 	Only called by the main thread */
 int add_req_to_buffer(char * str){
 	//make sure the buffer isn't full
@@ -52,7 +49,7 @@ int add_req_to_buffer(char * str){
 	return 0;
 }
 
-/* function to see if an id is already in a pair */
+/* See if an id is already in a pair */
 int in_pairs(struct pair *ps, int len, long id)
 {
 	for (; len >= 0 ; len--) {
@@ -61,14 +58,14 @@ int in_pairs(struct pair *ps, int len, long id)
 	return 0;
 }
 
-/* I separate this out so that we can easily confirm that the compiler
+/* Separate this out so that we can easily confirm that the compiler
  * is doing the proper optimizations. */
 void *do_lookups(struct pair *ps, cvect_t *v)
 {
 	return cvect_lookup(v, ps->id);	
 }
 
-/* Constructor */
+/* Initialization code */
 cvect_t *ccache_init(void){
 	
 	/* Initialize cvect stuff */
@@ -78,7 +75,7 @@ cvect_t *ccache_init(void){
 
 	/* socket buffer */
 	cb = malloc(sizeof(*cb));
-	buffer_init(cb, BUFFER_LENGTH, sizeof(int));
+	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
 
 	/* initialize thread pool */
 	int i, rc;
@@ -119,27 +116,22 @@ long hash(char *str){
 }
 
 
-/* The Following three functons populate the data. Initial parsing as already occurred */
+/* The Following three functons populate the data. Initial parsing has already occurred */
 int ccache_get(creq_t *creq){
-	/* Each item sent by the server will look like: VALUE <key> <flags> <bytes> [<cas unique>]\r\n
-<data block>\r\n */
 
-	
-	//create a new pair and put the key in it, the cvect call will fill in the value
+	//create a new pair for the cvect call and put the key in it.
 	struct pair getpair;
 	long hashedkey = hash(creq->key);
 	getpair.id = hashedkey;
-	//TODO:shouldn't need to lock here, just reading but double check this
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
-		node_t *head = (node_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
+		node_t *head = (node_t *) lookup_result; 
 		creq->resp.errcode = 0;
 		while(1){
-			//if the keys are equal, we have the element so stop iteration
 			if(!(strcmp(head->creq->key, creq->key))){
 				creq = head->creq; 
-				creq->type = CGET; //set command back to GET
+				creq->type = CGET;
 				break;
 			}
 			else if(head->next == NULL){
@@ -150,7 +142,7 @@ int ccache_get(creq_t *creq){
 		}
 	}
 	else{
-		//Data was not found so set the error code flag and nothing will be sent back
+		
 		creq->resp.errcode = -1;
 	}
 	pthread_mutex_unlock(&cvect_mutex);
@@ -175,7 +167,6 @@ int ccache_get(creq_t *creq){
 int ccache_set(creq_t *creq){
 
 	printf("Data line to be cached: ");
-	//use temp string to hold scanf data then copy it to the struct
 	char *temp_data = (char * ) malloc(creq->bytes);
 	int input_success = scanf("%s", temp_data);
 	if(!input_success){
@@ -183,8 +174,7 @@ int ccache_set(creq_t *creq){
 		exit(1);
 	}
 	strcpy(creq->data, temp_data);
-	
-	/* Get the hash result of the key */
+
 	long hashedkey = hash(creq->key);
 
 	/* create the new pair and the new node that is the pairs value */
@@ -281,7 +271,7 @@ int ccache_delete(creq_t *creq){
 				}
 				if(head->next != NULL) head = head->next;
 				else{
-					creq->resp.errcode = -2;
+					creq->resp.errcode = -1;
 					break;
 				}
 
@@ -314,17 +304,20 @@ creq_t *ccache_req_parse(char *cmd){
 	char * pch;
 	pch = strtok(cmd, " ");
 	int counter = 0;
+	creq->resp.errcode = 0;
 	while(pch != NULL){
-		
 		/* first find out what command the first token is */
 		if(counter == 0){
-
 			if(strcmp(pch, "get") == 0) creq->type = CGET;
-			if(strcmp(pch, "set") == 0) creq->type = CSET;
-			if(strcmp(pch, "delete") == 0) creq->type = CDELETE;
+			else if(strcmp(pch, "set") == 0) creq->type = CSET;
+			else if(strcmp(pch, "delete") == 0) creq->type = CDELETE;
+			else{
+				creq->resp.errcode = 1;
+				break;
+			}
 		}
 		/* second token will always be the key */
-		else if(counter == 1){
+		else if(counter == 1){		
 			//key is an array, pch is a pointer so must use strcopy here
 			strcpy(creq->key, pch);
 		}
@@ -339,15 +332,18 @@ creq_t *ccache_req_parse(char *cmd){
 					break;
 				/* set <key> <flags> <exptime> <bytes> [noreply]\r\n */
 				case CSET:
-		 			if(counter == 2){
+		 			if(counter == 2){			
 		 				creq->flags = atoi(pch);
 		 			}
-		 			else if(counter == 3){
-						creq->exp_time = atoi(pch);
+		 			else if(counter == 3){						
+		 				creq->exp_time = atoi(pch);
 					}
-		 			else if(counter == 4){
+		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes);
+		 			}
+		 			else{
+		 				break;
 		 			}
 		 		/* delete <key> [noreply]\r\n */
 				case CDELETE:
@@ -362,6 +358,7 @@ creq_t *ccache_req_parse(char *cmd){
 		counter++;
 		//TODO: Now call ccache_req_process(creq_t *r) to fill in the data portion and the rest of the struct
 	}
+
 
 	/* Debug info */
 	#if DEBUG
@@ -383,64 +380,99 @@ creq_t *ccache_req_parse(char *cmd){
 			break;
 	}
 	#endif /* DEBUG */
+
+	/* check counter for the type - client errors */
+	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
+		|| (creq->type == CDELETE && counter != 2)){
+		creq->resp.errcode = 2;
+	}
 	
-
-	/* Now that the tokens are done - continue the processing by calling the respective functions */
-	if(creq->type == CGET){
-		ccache_get(creq);
-		//This is definitely the last GET to be processed regardless of # of input tokens so send END
-		printf("END\r\n");
+	/* deal with any parsing errors */
+	if(creq->resp.errcode == 1 || creq->resp.errcode == 2){
+		ccache_resp_synth(creq);
+		ccache_resp_send(creq);
 	}
-	else if(creq->type == CSET) {
-		ccache_set(creq);
+	else{
+		/* Now that the tokens are done - continue the processing by calling the respective functions */
+		if(creq->type == CGET){
+			ccache_get(creq);
+			//This is definitely the last GET to be processed regardless of # of input tokens so send END
+			printf("END\r\n");
+		}
+		else if(creq->type == CSET) {
+			ccache_set(creq);
+		}
+		else if(creq->type == CDELETE){ 
+			ccache_delete(creq);
+		}
 	}
-	else if(creq->type == CDELETE){ 
-		ccache_delete(creq);
-	}
-
 	return creq;
 }
 
 int ccache_resp_synth(creq_t *creq){
-	switch(creq->type){
-		case CSET:
-			// Configure the header based on whether the data was saved successfully or not 
-			creq->resp.header = (char * ) malloc(16);
-			if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
-			else creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
-			creq->resp.footer = "";
-			creq->resp.foot_sz = 0;
-			break;
-		case CGET:
-			// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
-			// Footer should be the data block
-			
-			creq->resp.header = (char * ) malloc(1<<8);
-			creq->resp.footer = (char * ) malloc(creq->bytes);
-			//only populate the fields if no errors were encountered
-			if(!creq->resp.errcode){
-				creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
-				creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
-			}
-			break;
-		case CDELETE:
-			creq->resp.header = (char * ) malloc(16);	
-			if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
-			else creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
-			creq->resp.footer = "";
-			creq->resp.foot_sz = 0;
-			break;
+	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
+		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
+		switch(creq->resp.errcode){
+			case 1: 
+				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
+				break;
+			case 2:
+				sprintf(creq->resp.header, "CLIENT ERROR Incorrect arguments detected\r\n");
+				break;
+			case 3:
+				sprintf(creq->resp.header, "SERVER ERROR Server is unresponsive, try again in a bit\r\n");
+				break;
+			default:
+				break;
+		}
+	}
+	else{
+		switch(creq->type){
+			case CSET:
+				// Configure the header based on whether the data was saved successfully or not 
+				creq->resp.header = (char * ) malloc(16);
+				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
+				else if(creq->resp.errcode == -1) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
+				creq->resp.footer = "";
+				creq->resp.foot_sz = 0;
+				break;
+			case CGET:
+				// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
+				// Footer should be the data block
+				
+				creq->resp.header = (char * ) malloc(1<<8);
+				creq->resp.footer = (char * ) malloc(creq->bytes);
+				//only populate the fields if no errors were encountered
+				if(!creq->resp.errcode){
+					creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
+					creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
+				}
+				break;
+			case CDELETE:
+				creq->resp.header = (char * ) malloc(16);	
+				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
+				else if(creq->resp.errcode == -1) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
+				creq->resp.footer = "";
+				creq->resp.foot_sz = 0;
+				break;
+			default:
+				break;
+		}
 	}
 	return 0;
 }
 
 
 /* Actually serialize the headers/footers/and the data */
-int ccache_resp_send(creq_t *creq){
+int ccache_resp_send(creq_t *creq){	
 	//TESTING CODE - just going to print out the values for now - should eventually send data through a socket
 	printf("%s", creq->resp.header);
-	printf("%s", creq->resp.footer);
+	if(creq->resp.errcode == -1 || creq->resp.errcode == 0){
+		printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
+	}
+
 	return 0;
+
 }
 
 
