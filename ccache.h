@@ -22,7 +22,7 @@
 #include "cvect.h"
 
 /* Concurrency */
-#define MAX_CONCURRENCY 1
+#define MAX_CONCURRENCY 4
 
 /* linked list */
 #include "llnode.h"
@@ -98,7 +98,7 @@ int in_pairs(struct pair *ps, int len, long id);
 void *do_lookups(struct pair *ps, cvect_t *v);
 
 /* function for threads */
-void *thread_start(void * thread_num);
+void *thread_start(void *);
 
 /* add the request from the main thread to a buffer for a worker thread to pick up */
 int add_req_to_buffer(char * str);

@@ -24,7 +24,7 @@ sem_t buffer_sem;
 /* Function for the main thread to pass inputs over to threads. 
 	Worker threads will block until a semaphore is incremented by the main threads.
 	They will then pop the request off the circular buffer and take care of it */
-void *thread_start(void * thread_num){
+void *thread_start(void *id){
 	while(1){
 		sem_wait(&buffer_sem); 
 		pthread_mutex_lock(&buffer_mutex);
@@ -33,7 +33,7 @@ void *thread_start(void * thread_num){
 
 		ccache_req_parse(cmd);
 	}
-	printf("This code shouldn't be executing! Quitting\n");
+	printf("Thread %d has reached a part of code that shouldn't be executing! Quitting\n", (int) id);
 	exit(1);
 }
 
@@ -81,7 +81,6 @@ cvect_t *ccache_init(void){
 	int i, rc;
 	for(i = 0; i < MAX_CONCURRENCY; i++){
 		//init thread
-		//printf("Creating thread: %i\n", i);
 		rc = pthread_create(&workerThreads[i], NULL, thread_start, (void *) i);
 		//error check
 		if(rc){
@@ -194,14 +193,18 @@ int ccache_set(creq_t *creq){
 		head = (node_t *) lookup_result; //if non-zero we can now typecast
 		while(1){
 			if(!(strcmp(insert_node->creq->key, head->creq->key))) {
-				creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+				//memcpy(head, insert_node, sizeof(node_t)); //just copy over the memory overwriting all the old fields
+				head->creq = insert_node->creq;
+				break;
 			}
-			if(head->next == NULL) break;
+			if(head->next == NULL){
+				head->next = insert_node;
+				break;	
+			} 
 			else head = head->next;
-
 		}
 		//at this point head.next == null so set head.next to the insert node
-		head->next = insert_node;
+		
 	}
 	else{
 		//add the pair to the cvect
@@ -265,11 +268,16 @@ int ccache_delete(creq_t *creq){
 		else{
 			while(1){
 				if(head->next != NULL && !strcmp(head->next->creq->key, creq->key)){
-					free(head->next); //garbage collect the node's references
-					if(head->next->next != NULL) head->next = head->next->next; //change the pointers
+					if(head->next->next != NULL){
+						head->next = head->next->next; //change the pointers
+					}
+					else{
+						//this is the last node in the list
+						head->next = NULL;
+					}
 					break;
 				}
-				if(head->next != NULL) head = head->next;
+				else if(head->next != NULL) head = head->next;
 				else{
 					creq->resp.errcode = -1;
 					break;
