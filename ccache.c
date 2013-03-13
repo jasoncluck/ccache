@@ -21,9 +21,9 @@ sem_t buffer_sem;
 
 
 
-/* 	Function for the main thread to pass inputs over to threads. 
+/* Function for the main thread to pass inputs over to threads. 
 	Worker threads will block until a semaphore is incremented by the main threads.
-	They will then pop the request off the circular buffer and take care of it*/
+	They will then pop the request off the circular buffer and take care of it */
 void *thread_start(void * thread_num){
 	while(1){
 		sem_wait(&buffer_sem); 

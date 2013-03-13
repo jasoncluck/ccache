@@ -5,17 +5,25 @@ Cloud cache is a library for sharing memory across compute nodes.  It utilizes a
 This code is under development at this time and unstable.  I'll add more information once this is closer to deployment.
 
 There are three commands currently working: GET, SET, DELETE.
-They expect the follow formats;
+They expect the follow formats:
+
 GET: get <key>*
+
 SET: sets <key> <flags> <bytes> \r\n
+
 <data block>\r\n
+
 DELETE: delete <key>
 
 The * means 1 or more keys are acceptable.
 
 Possible error return values:
+
 "ERROR\r\n": client sent a nonexistent command name
-"CLIENT_ERROR <error>\r\n": Something wrong on the client side - wrong number of arguments for example
+
+"CLIENT_ERROR <error>\r\n": Something wrong on the client side - wrong 
+number of arguments for example
+
 "SERVER_ERROR <error>\r\n": 
 
 More info and expected server responses can be found in the full [memcached protocol description](https://github.com/memcached/memcached/blob/master/doc/protocol.txt).
