@@ -7,13 +7,13 @@ This code is under development at this time and unstable.  I'll add more informa
 There are three commands currently working: GET, SET, DELETE.
 They expect the follow formats:
 
-GET: get <key>*
+GET: get "key"
 
-SET: sets <key> <flags> <bytes> \r\n
+SET: sets "key" "flags" "bytes" \r\n
 
-<data block>\r\n
+"data block"\r\n
 
-DELETE: delete <key>
+DELETE: delete "key"
 
 The * means 1 or more keys are acceptable.
 
@@ -21,10 +21,12 @@ Possible error return values:
 
 "ERROR\r\n": client sent a nonexistent command name
 
-"CLIENT_ERROR <error>\r\n": Something wrong on the client side - wrong 
+"CLIENT_ERROR "error"\r\n": Something wrong on the client side - wrong 
 number of arguments for example
 
-"SERVER_ERROR <error>\r\n": 
+"SERVER_ERROR "error"\r\n":
+
+"error" indicates some sort of human readable error message. 
 
 More info and expected server responses can be found in the full [memcached protocol description](https://github.com/memcached/memcached/blob/master/doc/protocol.txt).
 
