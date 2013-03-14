@@ -11,8 +11,9 @@
 
 int main(){
 	cvect_t *dyn_vect = ccache_init();
-
 	assert(dyn_vect);
+	if(thread_pool_init()) goto mem_error;
+	if(command_buffer_init()) goto mem_error;
 	
 	char *cmd = malloc(MAX_CMD_SZ);
 	while(1){
@@ -24,15 +25,17 @@ int main(){
 		//can quit with 'q'
 		if(!(strcmp(cmd, "q"))) {
 			printf("Quitting\n");
-			break;
+			goto done;
 		}
 
 		add_req_to_buffer(cmd);
 		sleep(1); //allow the workers to go
 	}
-
-	free(cmd);
-	
-	cvect_struct_free(dyn_vect);
-	return 0;
+	done:
+		free(cmd);
+		cvect_struct_free(dyn_vect);
+		return 0;
+	mem_error:
+		printf("Couldn't allocate memory for data structure - quitting\n");
+		exit(1);
 }

@@ -24,7 +24,8 @@ sem_t buffer_sem;
 /* Function for the main thread to pass inputs over to threads. 
 	Worker threads will block until a semaphore is incremented by the main threads.
 	They will then pop the request off the circular buffer and take care of it */
-void *thread_start(void *id){
+void *
+thread_start(void *id){
 	while(1){
 		sem_wait(&buffer_sem); 
 		pthread_mutex_lock(&buffer_mutex);
@@ -37,9 +38,10 @@ void *thread_start(void *id){
 	exit(1);
 }
 
-/* 	Adding a request to the circular buffer.
+/* Adding a request to the circular buffer.
 	Only called by the main thread */
-int add_req_to_buffer(char * str){
+int 
+add_req_to_buffer(char * str){
 	//make sure the buffer isn't full
 	pthread_mutex_lock(&buffer_mutex);
 	push(str, cb);
@@ -50,7 +52,8 @@ int add_req_to_buffer(char * str){
 }
 
 /* See if an id is already in a pair */
-int in_pairs(struct pair *ps, int len, long id)
+int 
+in_pairs(struct pair *ps, int len, long id)
 {
 	for (; len >= 0 ; len--) {
 		if (ps[len].id == id) return 1;
@@ -60,23 +63,26 @@ int in_pairs(struct pair *ps, int len, long id)
 
 /* Separate this out so that we can easily confirm that the compiler
  * is doing the proper optimizations. */
-void *do_lookups(struct pair *ps, cvect_t *v)
+void *
+do_lookups(struct pair *ps, cvect_t *v)
 {
 	return cvect_lookup(v, ps->id);	
 }
 
 /* Initialization code */
-cvect_t *ccache_init(void){
+cvect_t *
+ccache_init(void){
 	
 	/* Initialize cvect stuff */
 	dyn_vect = cvect_alloc();
 	assert(dyn_vect);
 	cvect_init(dyn_vect);
 
-	/* socket buffer */
-	cb = malloc(sizeof(*cb));
-	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
+	return dyn_vect;
+}
 
+int 
+thread_pool_init(){
 	/* initialize thread pool */
 	int i, rc;
 	for(i = 0; i < MAX_CONCURRENCY; i++){
@@ -96,13 +102,21 @@ cvect_t *ccache_init(void){
 	pthread_mutex_init(&buffer_mutex, NULL);
 	sem_init(&buffer_sem, 0, -1); //turn off forks - can't do this in Linux anyways.  Initial value of -1, non-negative values stop threads from blocking
 
-	return dyn_vect;
+	return 0;
+}
+int 
+command_buffer_init(){
+	/* socket buffer */
+	cb = malloc(sizeof(*cb));
+	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
+	return 0;
 }
 
 
 /* Hashing function: Takes in an value and produces a key for that value to be mapped to. Key < 2^20 due to cvect contraints.
 Hashing function is djb: http://www.cse.yorku.ca/~oz/hash.html*/
-long hash(char *str){
+long 
+hash(char *str){
 	unsigned long hash = 5381;
     int c;
 
@@ -116,7 +130,8 @@ long hash(char *str){
 
 
 /* The Following three functons populate the data. Initial parsing has already occurred */
-int ccache_get(creq_t *creq){
+int 
+ccache_get(creq_t *creq){
 
 	//create a new pair for the cvect call and put the key in it.
 	struct pair getpair;
@@ -126,7 +141,7 @@ int ccache_get(creq_t *creq){
 	pthread_mutex_lock(&cvect_mutex);
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		node_t *head = (node_t *) lookup_result; 
-		creq->resp.errcode = 0;
+		creq->resp.errcode = NOERROR;
 		while(1){
 			if(!(strcmp(head->creq->key, creq->key))){
 				creq = head->creq; 
@@ -134,7 +149,7 @@ int ccache_get(creq_t *creq){
 				break;
 			}
 			else if(head->next == NULL){
-				creq->resp.errcode = -1;
+				creq->resp.errcode = RERROR;
 				break;
 			} 
 			else head = head->next;
@@ -142,7 +157,7 @@ int ccache_get(creq_t *creq){
 	}
 	else{
 		
-		creq->resp.errcode = -1;
+		creq->resp.errcode = RERROR;
 	}
 	pthread_mutex_unlock(&cvect_mutex);
 
@@ -163,7 +178,8 @@ int ccache_get(creq_t *creq){
 	return 0;
 }
 
-int ccache_set(creq_t *creq){
+int 
+ccache_set(creq_t *creq){
 
 	printf("Data line to be cached: ");
 	char *temp_data = (char * ) malloc(creq->bytes);
@@ -211,7 +227,7 @@ int ccache_set(creq_t *creq){
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
 	}	
 
-	assert(!creq->resp.errcode); //if no errors: creq->resp.errcode == 0;
+	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
 	pthread_mutex_lock(&cvect_counter_mutex);
 	pairs_counter++;
 
@@ -235,24 +251,25 @@ int ccache_set(creq_t *creq){
 
 }
 
-int ccache_delete(creq_t *creq){
+int 
+ccache_delete(creq_t *creq){
 
-	struct pair deletepair;
+	struct pair delete_pair;
 	long hashedkey = hash(creq->key);
-	deletepair.id = hashedkey;	
+	delete_pair.id = hashedkey;	
 	
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
-	if((lookup_result = do_lookups(&deletepair, dyn_vect)) != 0){
+	if((lookup_result = do_lookups(&delete_pair, dyn_vect)) != 0){
 		node_t *head = (node_t *) lookup_result; //if non-zero we can typecast this without seg faulting	
-		creq->resp.errcode = 0;
+		creq->resp.errcode = NOERROR;
 		
 		//check the first node
 		if(!(strcmp(head->creq->key, creq->key))){
 			//if there is nothing after the first node, just delete the whole cvect bucket
 			if(head->next == NULL){
-				creq->resp.errcode = cvect_del(dyn_vect, deletepair.id);	
-				if(!creq->resp.errcode){
+				creq->resp.errcode = cvect_del(dyn_vect, delete_pair.id);	
+				if(creq->resp.errcode == NOERROR){
 					//counter is always inside of cvect lock so this probably isn't needed...
 					pthread_mutex_lock(&cvect_counter_mutex);
 					pairs_counter--;	
@@ -279,7 +296,7 @@ int ccache_delete(creq_t *creq){
 				}
 				else if(head->next != NULL) head = head->next;
 				else{
-					creq->resp.errcode = -1;
+					creq->resp.errcode = RERROR;
 					break;
 				}
 
@@ -289,7 +306,7 @@ int ccache_delete(creq_t *creq){
 	}		
 	else{
 		//Data not found in cvect, return error
-		creq->resp.errcode = -1;
+		creq->resp.errcode = RERROR;
 	}	
 	pthread_mutex_unlock(&cvect_mutex);
 	
@@ -303,7 +320,8 @@ int ccache_delete(creq_t *creq){
 
 //Commands look like: <command name> <key> <flags> <exptime> <bytes> [noreply]\r\n
 /* Function to parse the string and put it into the structure above */
-creq_t *ccache_req_parse(char *cmd){
+creq_t *
+ccache_req_parse(char *cmd){
 	//Command is passed as a string along with its length
 	//Can start by tokenizing this data, and determining what type of command it is.
 
@@ -312,7 +330,7 @@ creq_t *ccache_req_parse(char *cmd){
 	char * pch;
 	pch = strtok(cmd, " ");
 	int counter = 0;
-	creq->resp.errcode = 0;
+	creq->resp.errcode = NOERROR;
 	while(pch != NULL){
 		/* first find out what command the first token is */
 		if(counter == 0){
@@ -392,11 +410,11 @@ creq_t *ccache_req_parse(char *cmd){
 	/* check counter for the type - client errors */
 	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
 		|| (creq->type == CDELETE && counter != 2)){
-		creq->resp.errcode = 2;
+		creq->resp.errcode = CERROR;
 	}
 	
 	/* deal with any parsing errors */
-	if(creq->resp.errcode == 1 || creq->resp.errcode == 2){
+	if(creq->resp.errcode == ERROR || creq->resp.errcode == CERROR){
 		ccache_resp_synth(creq);
 		ccache_resp_send(creq);
 	}
@@ -417,17 +435,18 @@ creq_t *ccache_req_parse(char *cmd){
 	return creq;
 }
 
-int ccache_resp_synth(creq_t *creq){
+int 
+ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
 		switch(creq->resp.errcode){
-			case 1: 
+			case ERROR: 
 				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
 				break;
-			case 2:
+			case CERROR:
 				sprintf(creq->resp.header, "CLIENT ERROR Incorrect arguments detected\r\n");
 				break;
-			case 3:
+			case SERROR:
 				sprintf(creq->resp.header, "SERVER ERROR Server is unresponsive, try again in a bit\r\n");
 				break;
 			default:
@@ -439,8 +458,8 @@ int ccache_resp_synth(creq_t *creq){
 			case CSET:
 				// Configure the header based on whether the data was saved successfully or not 
 				creq->resp.header = (char * ) malloc(16);
-				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
-				else if(creq->resp.errcode == -1) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
+				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
+				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
 				creq->resp.foot_sz = 0;
 				break;
@@ -459,7 +478,7 @@ int ccache_resp_synth(creq_t *creq){
 			case CDELETE:
 				creq->resp.header = (char * ) malloc(16);	
 				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
-				else if(creq->resp.errcode == -1) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
+				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
 				creq->resp.footer = "";
 				creq->resp.foot_sz = 0;
 				break;
@@ -472,10 +491,11 @@ int ccache_resp_synth(creq_t *creq){
 
 
 /* Actually serialize the headers/footers/and the data */
-int ccache_resp_send(creq_t *creq){	
+int 
+ccache_resp_send(creq_t *creq){	
 	//TESTING CODE - just going to print out the values for now - should eventually send data through a socket
 	printf("%s", creq->resp.header);
-	if(creq->resp.errcode == -1 || creq->resp.errcode == 0){
+	if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
 		printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
 	}
 
@@ -484,12 +504,14 @@ int ccache_resp_send(creq_t *creq){
 }
 
 
-int ccache_req_free(creq_t *creq){
+int 
+ccache_req_free(creq_t *creq){
 	free(creq);
 	return 0;
 }
 
-void cvect_struct_free(cvect_t *dyn_vect){
+void 
+cvect_struct_free(cvect_t *dyn_vect){
 	cvect_free(dyn_vect);
 }
 
