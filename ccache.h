@@ -26,6 +26,7 @@
 
 /* linked list */
 #include "llnode.h"
+#include "dlinkedlist.h"
 
 /* Command buffer */
 #include "circBuffer.h"
