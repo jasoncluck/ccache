@@ -1,4 +1,4 @@
-OBJS=ccache.o ccache_example.o circBuffer.o dlinkedlist.o
+OBJS=ccache.o ccache_example.o circBuffer.o creqlinkedlist.o 
 CFLAGS=-g -I. -Wall -Wextra -pthread -Wno-unused-function
 BIN=ccache
 CC=gcc

@@ -100,6 +100,11 @@ typedef struct cvect_struct {
 	struct cvect_intern vect[CVECT_BASE];
 } cvect_t;
 
+struct pair {
+	long id;
+	void *val;
+};
+
 #define CVECT_CREATE_STATIC(name)					\
 	cvect_t name = {.vect = {{.c.next = NULL}}} 
 

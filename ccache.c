@@ -140,15 +140,15 @@ ccache_get(creq_t *creq){
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
-		struct dlinked_list *cvect_list = (struct dlinked_list *) lookup_result; 
+		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
 		creq->resp.errcode = NOERROR;
 		while(1){
-			if(!(strcmp(cvect_list->head->creq->key, creq->key))){
-				creq = cvect_list->head->creq; 
+			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {
+				creq = cvect_list->head; 
 				creq->type = CGET;
 				break;
 			}
-			else if(cvect_list->head->next == NULL){
+			else if(cvect_list->head->next == NULL) {
 				creq->resp.errcode = RERROR;
 				break;
 			} 
@@ -195,30 +195,27 @@ ccache_set(creq_t *creq){
 	/* create the new pair and the new node that is the pairs value */
 	pthread_mutex_lock(&cvect_pairs_mutex);
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
-	pairs[pairs_counter].val = malloc(sizeof(struct dlinked_list)); //malloc space for the pointer to the node object
+	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
-	struct dlinked_list *insert_dll = malloc(sizeof(struct dlinked_list));
-	struct dlinked_list *cvect_dll = malloc(sizeof(struct dlinked_list));
-	node_t *insert_node = (node_t *) malloc(sizeof(node_t));
-	//initalize insert_lists head node (only node)
-	insert_node->creq = creq;
-	insert_node->next = NULL;
-	add_node(insert_dll, insert_node);
-	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct dlinked_list)); //store the linked list in the cvect
+	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
+	
+	add_creq(insert_dll, creq);
+	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
 
 	/* check to see if this key already exists, if it doesn't: add it. If it does exist, resolve linked node collision */
 	void *lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
-	if((lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect)) != 0){
-		cvect_dll = (struct dlinked_list *) lookup_result;
+	if((lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect)) != 0) //string exists
+	{ 
+		struct creq_linked_list *cvect_dll = (struct creq_linked_list *) lookup_result;
 		while(1){
-			if(!(strcmp(insert_dll->head->creq->key, cvect_dll->head->creq->key))) {
+			if(!(strcmp(insert_dll->head->key, cvect_dll->head->key))) {
 				//memcpy(head, insert_node, sizeof(node_t)); //just copy over the memory overwriting all the old fields
-				cvect_dll->head->creq = insert_dll->head->creq;
+				cvect_dll->head = insert_dll->head;
 				break;
 			}
 			if(cvect_dll->head->next == NULL){
-				add_node(cvect_dll, insert_dll->head); //add the insert node to the end of the cvect's list
+				add_creq(cvect_dll, insert_dll->head); //add the insert node to the end of the cvect's list
 				break;	
 			} 
 			else cvect_dll->head = cvect_dll->head->next;
@@ -226,7 +223,8 @@ ccache_set(creq_t *creq){
 		//at this point head.next == null so set head.next to the insert node
 		
 	}
-	else{
+	else
+	{
 		//add the pair to the cvect
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
 	}	
@@ -265,11 +263,11 @@ ccache_delete(creq_t *creq){
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
 	if((lookup_result = do_lookups(&delete_pair, dyn_vect)) != 0){
-		struct dlinked_list *cvect_list = (struct dlinked_list *) lookup_result; //if non-zero we can typecast this without seg faulting	
+		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; //if non-zero we can typecast this without seg faulting	
 		creq->resp.errcode = NOERROR;
 		
 		//check the first node
-		if(!(strcmp(cvect_list->head->creq->key, creq->key))){
+		if(!(strcmp(cvect_list->head->key, creq->key))){
 			//if there is nothing after the first node, just delete the whole cvect bucket
 			if(cvect_list->head->next == NULL){
 				creq->resp.errcode = cvect_del(dyn_vect, delete_pair.id);	
@@ -282,12 +280,12 @@ ccache_delete(creq_t *creq){
 			} 
 			else{
 				//if there is another node after the first one - have to change the cvect pointer. also get rid of cvect_list->head's data
-				memcpy(cvect_list->head, cvect_list->head->next, sizeof(node_t));
+				memcpy(cvect_list->head, cvect_list->head->next, sizeof(creq_t));
 				free(cvect_list->head->next);
 			}			
 		}
 		else{
-			creq->resp.errcode = delete_node(cvect_list, creq);
+			creq->resp.errcode = delete_creq(cvect_list, creq);
 		}
 	}		
 	else{
