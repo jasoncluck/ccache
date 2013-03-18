@@ -16,26 +16,6 @@
 /* ccache native */
 #define MAX_CMD_SZ (1<<10)
 
-/* cvect stuff */
-#define COS_LINUX_ENV
-#define LINUX_TEST
-#include "cvect.h"
-
-/* Concurrency */
-#define MAX_CONCURRENCY 4
-
-/* linked list */
-#include "llnode.h"
-#include "dlinkedlist.h"
-
-/* Command buffer */
-#include "circBuffer.h"
-#define BUFFER_LENGTH 256
-
-/* Turn debugging on */
-#define DEBUG 0
-
-
 struct pair {
 	long id;
 	void *val;
@@ -62,6 +42,30 @@ typedef struct creq {
 	} resp;
 
 } creq_t;
+
+
+
+/* cvect stuff */
+#define COS_LINUX_ENV
+#define LINUX_TEST
+#include "cvect.h"
+
+/* Concurrency */
+#define MAX_CONCURRENCY 4
+
+/* linked list */
+#include "llnode.h"
+#include "dlinkedlist.h"
+
+/* Command buffer */
+#include "circBuffer.h"
+#define BUFFER_LENGTH 256
+
+/* Turn debugging on */
+#define DEBUG 0
+
+
+
 
 /* Constructor for initialization.  For cvect initialization mainly */
 cvect_t *

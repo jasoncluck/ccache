@@ -287,25 +287,7 @@ ccache_delete(creq_t *creq){
 			}			
 		}
 		else{
-			while(1){
-				if(cvect_list->head->next != NULL && !strcmp(cvect_list->head->next->creq->key, creq->key)){
-					if(cvect_list->head->next->next != NULL){
-						cvect_list->head->next = cvect_list->head->next->next; //change the pointers
-					}
-					else{
-						//this is the last node in the list
-						cvect_list->head->next = NULL;
-					}
-					break;
-				}
-				else if(cvect_list->head->next != NULL) cvect_list->head = cvect_list->head->next;
-				else{
-					creq->resp.errcode = RERROR;
-					break;
-				}
-
-			}
-
+			creq->resp.errcode = delete_node(cvect_list, creq);
 		}
 	}		
 	else{
