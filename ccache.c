@@ -108,6 +108,7 @@ int
 command_buffer_init(){
 	/* socket buffer */
 	cb = malloc(sizeof(*cb));
+	assert(cb);
 	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
 	return 0;
 }
@@ -183,6 +184,7 @@ ccache_set(creq_t *creq){
 
 	printf("Data line to be cached: ");
 	char *temp_data = (char * ) malloc(creq->bytes);
+	if(!temp_data) remove_oldest_creq();
 	int input_success = scanf("%s", temp_data);
 	if(!input_success){
 		printf("Input error - quitting");
@@ -198,6 +200,8 @@ ccache_set(creq_t *creq){
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
+	if(!pairs[pairs_counter].val) remove_oldest_creq();
+	if(!insert_dll) remove_oldest_creq();
 	
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -310,6 +314,7 @@ ccache_req_parse(char *cmd){
 	//Can start by tokenizing this data, and determining what type of command it is.
 
 	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
+	if(!creq) remove_oldest_creq();
 	//printf("%s\n", cmd);
 	char * pch;
 	pch = strtok(cmd, " ");
@@ -351,6 +356,7 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes);
+		 				if(!creq->data) remove_oldest_creq();
 		 			}
 		 			else{
 		 				break;
@@ -423,6 +429,7 @@ int
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
+		if(!creq->resp.header) remove_oldest_creq();
 		switch(creq->resp.errcode){
 			case ERROR: 
 				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
@@ -442,6 +449,7 @@ ccache_resp_synth(creq_t *creq){
 			case CSET:
 				// Configure the header based on whether the data was saved successfully or not 
 				creq->resp.header = (char * ) malloc(16);
+				if(!creq->resp.header) remove_oldest_creq();
 				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
@@ -453,6 +461,8 @@ ccache_resp_synth(creq_t *creq){
 				
 				creq->resp.header = (char * ) malloc(1<<8);
 				creq->resp.footer = (char * ) malloc(creq->bytes);
+				if(!creq->resp.header || !creq->resp.footer) remove_oldest_creq();
+
 				//only populate the fields if no errors were encountered
 				if(!creq->resp.errcode){
 					creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
@@ -461,6 +471,8 @@ ccache_resp_synth(creq_t *creq){
 				break;
 			case CDELETE:
 				creq->resp.header = (char * ) malloc(16);	
+				if(creq->resp.header) remove_oldest_creq();
+
 				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
 				creq->resp.footer = "";

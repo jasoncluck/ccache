@@ -24,6 +24,6 @@ typedef struct creq {
 		error_t errcode; //0 for successful, -1 for normal errors like element not found, 1 for command errors, 2 for client errors, 3 for server errors
 	} resp;
 
-	struct creq *next; //linked list node pointer
+	struct creq *next, *prev; //linked list node pointer
 
 } creq_t;

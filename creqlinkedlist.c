@@ -53,3 +53,11 @@ get_creq(struct creq_linked_list *dll, creq_t * creq){
 		}
 	return 0;
 }
+
+
+/* Function to remove the node at the tail from the linked list.
+	Only to be called if out of memory */
+void remove_oldest_creq(struct creq_linked_list *dll){
+	free(dll->tail);
+	dll->tail = NULL;
+}
