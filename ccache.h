@@ -12,6 +12,7 @@
 #include <string.h>
 #include <pthread.h>
 #include <semaphore.h>
+#include <unistd.h>
 
 /* ccache native */
 #define MAX_CMD_SZ (1<<10)
@@ -94,7 +95,7 @@ thread_start(void *);
 
 /* add the request from the main thread to a buffer for a worker thread to pick up */
 int 
-add_req_to_buffer(char * str);
+add_req_to_buffer(int socketfd, char * str);
 
 /* initialize thread pool, mutexes, semaphores */
 int 

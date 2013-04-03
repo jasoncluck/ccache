@@ -19,6 +19,8 @@ pthread_mutex_t cvect_counter_mutex;
 pthread_mutex_t buffer_mutex;
 sem_t buffer_sem;
 
+int g_socketfd = 0;
+
 
 
 /* Function for the main thread to pass inputs over to threads. 
@@ -41,12 +43,13 @@ thread_start(void *id){
 /* Adding a request to the circular buffer.
 	Only called by the main thread */
 int 
-add_req_to_buffer(char * str){
+add_req_to_buffer(int socketfd, char * str){
 	//make sure the buffer isn't full
 	pthread_mutex_lock(&buffer_mutex);
 	push(str, cb);
 	sem_post(&buffer_sem); //increment the semaphore because a new command is in the buffer
 	pthread_mutex_unlock(&buffer_mutex);
+	g_socketfd = socketfd;
 	
 	return 0;
 }
@@ -184,7 +187,7 @@ ccache_set(creq_t *creq){
 
 	printf("Data line to be cached: ");
 	char *temp_data = (char * ) malloc(creq->bytes);
-	if(!temp_data) remove_oldest_creq();
+	//if(!temp_data) remove_oldest_creq();
 	int input_success = scanf("%s", temp_data);
 	if(!input_success){
 		printf("Input error - quitting");
@@ -200,8 +203,8 @@ ccache_set(creq_t *creq){
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
-	if(!pairs[pairs_counter].val) remove_oldest_creq();
-	if(!insert_dll) remove_oldest_creq();
+	//if(!pairs[pairs_counter].val) remove_oldest_creq();
+	//if(!insert_dll) remove_oldest_creq();
 	
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -314,7 +317,7 @@ ccache_req_parse(char *cmd){
 	//Can start by tokenizing this data, and determining what type of command it is.
 
 	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
-	if(!creq) remove_oldest_creq();
+	if(creq == NULL) exit(1);
 	//printf("%s\n", cmd);
 	char * pch;
 	pch = strtok(cmd, " ");
@@ -356,7 +359,7 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes);
-		 				if(!creq->data) remove_oldest_creq();
+		 				if(creq->data == NULL) exit(1);
 		 			}
 		 			else{
 		 				break;
@@ -429,7 +432,7 @@ int
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
-		if(!creq->resp.header) remove_oldest_creq();
+		if(creq->resp.header == NULL) exit(1);
 		switch(creq->resp.errcode){
 			case ERROR: 
 				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
@@ -449,7 +452,7 @@ ccache_resp_synth(creq_t *creq){
 			case CSET:
 				// Configure the header based on whether the data was saved successfully or not 
 				creq->resp.header = (char * ) malloc(16);
-				if(!creq->resp.header) remove_oldest_creq();
+				if(creq->resp.header == NULL) exit(1);
 				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
@@ -461,7 +464,7 @@ ccache_resp_synth(creq_t *creq){
 				
 				creq->resp.header = (char * ) malloc(1<<8);
 				creq->resp.footer = (char * ) malloc(creq->bytes);
-				if(!creq->resp.header || !creq->resp.footer) remove_oldest_creq();
+				if(creq->resp.header == NULL|| creq->resp.footer == NULL) exit(1);
 
 				//only populate the fields if no errors were encountered
 				if(!creq->resp.errcode){
@@ -471,7 +474,7 @@ ccache_resp_synth(creq_t *creq){
 				break;
 			case CDELETE:
 				creq->resp.header = (char * ) malloc(16);	
-				if(creq->resp.header) remove_oldest_creq();
+				if(creq->resp.header == NULL) exit(1);
 
 				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
@@ -490,13 +493,21 @@ ccache_resp_synth(creq_t *creq){
 int 
 ccache_resp_send(creq_t *creq){	
 	//TESTING CODE - just going to print out the values for now - should eventually send data through a socket
-	printf("%s", creq->resp.header);
+	//printf("%s", creq->resp.header);
+	int n;
+	n = write(g_socketfd, creq->resp.header, creq->resp.head_sz);
+	if (n < 0) goto socket_error;
 	if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-		printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
+		//printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
+		n = write(g_socketfd, creq->resp.footer, creq->resp.foot_sz);
+		if (n < 0) goto socket_error;
 	}
 
 	return 0;
 
+	socket_error:
+		printf("Error writing to the socket");
+		exit(1);
 }
 
 
