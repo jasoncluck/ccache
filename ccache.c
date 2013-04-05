@@ -7,7 +7,8 @@
 struct pair pairs[1<<10];
 cvect_t *dyn_vect;
 int pairs_counter;
-
+int set_flag = 0;
+char * g_set_data = "";
 CB_t *cb;
 
 /* threads */
@@ -17,8 +18,9 @@ pthread_mutex_t cvect_mutex;
 pthread_mutex_t cvect_pairs_mutex;
 pthread_mutex_t cvect_counter_mutex;
 pthread_mutex_t buffer_mutex;
+pthread_mutex_t set_data_mutex;
 sem_t buffer_sem;
-
+sem_t set_data_sem;
 int g_socketfd = 0;
 
 
@@ -34,7 +36,8 @@ thread_start(void *id){
 		char * cmd = pop(cb);
 		pthread_mutex_unlock(&buffer_mutex);
 
-		ccache_req_parse(cmd);
+		if (!set_flag) ccache_req_parse(cmd);
+		else ccache_add_set_data(cmd);
 	}
 	printf("Thread %d has reached a part of code that shouldn't be executing! Quitting\n", (int) id);
 	exit(1);
@@ -103,7 +106,9 @@ thread_pool_init(){
 	pthread_mutex_init(&cvect_counter_mutex, NULL);
 	pthread_mutex_init(&cvect_pairs_mutex, NULL);
 	pthread_mutex_init(&buffer_mutex, NULL);
+	pthread_mutex_init(&set_data_mutex, NULL);
 	sem_init(&buffer_sem, 0, -1); //turn off forks - can't do this in Linux anyways.  Initial value of -1, non-negative values stop threads from blocking
+	sem_init(&set_data_sem, 0, -1);
 
 	return 0;
 }
@@ -182,9 +187,28 @@ ccache_get(creq_t *creq){
 	return 0;
 }
 
+
+/* Helper method for adding data to the set command
+ * Only triggered via a set creq being processed.
+*/
+int
+ccache_add_set_data(char *creq_data){
+	g_set_data = creq_data; //set the data to a global, only one thread is going due to mutex
+	set_flag = 0;
+	sem_post(&set_data_sem); //increment the semaphore because a new command is in the buffer
+	return 0;
+}
+
+
+
 int 
 ccache_set(creq_t *creq){
 
+	pthread_mutex_lock(&set_data_mutex);
+	set_flag = 1;
+	sem_wait(&set_data_sem); // wait for the data to be inserted into the queue
+	creq->data = g_set_data; // set the global data to the 
+	pthread_mutex_unlock(&set_data_mutex); //let another thead with a set command go now
 	printf("Data line to be cached: ");
 	char *temp_data = (char * ) malloc(creq->bytes);
 	//if(!temp_data) remove_oldest_creq();
@@ -259,6 +283,7 @@ ccache_set(creq_t *creq){
 	return 0;
 
 }
+
 
 int 
 ccache_delete(creq_t *creq){

@@ -59,6 +59,10 @@ int
 ccache_get(creq_t *creq);
 
 int 
+ccache_add_set_data(char *creq_data);
+
+
+int 
 ccache_set(creq_t *creq);
 
 int 
