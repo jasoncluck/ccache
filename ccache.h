@@ -34,6 +34,9 @@
 #include "circBuffer.h"
 #define BUFFER_LENGTH 256
 
+/* Socket code */
+#include <ccache_socket.h>
+
 /* Turn debugging on */
 #define DEBUG 0
 

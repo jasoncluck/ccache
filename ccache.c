@@ -7,7 +7,7 @@
 struct pair pairs[1<<10];
 cvect_t *dyn_vect;
 int pairs_counter;
-int set_flag = 0;
+int set_flag;
 char * g_set_data = "";
 CB_t *cb;
 
@@ -193,6 +193,7 @@ ccache_get(creq_t *creq){
 */
 int
 ccache_add_set_data(char *creq_data){
+	printf("in ccache add_set data");
 	g_set_data = creq_data; //set the data to a global, only one thread is going due to mutex
 	set_flag = 0;
 	sem_post(&set_data_sem); //increment the semaphore because a new command is in the buffer
@@ -209,15 +210,6 @@ ccache_set(creq_t *creq){
 	sem_wait(&set_data_sem); // wait for the data to be inserted into the queue
 	creq->data = g_set_data; // set the global data to the 
 	pthread_mutex_unlock(&set_data_mutex); //let another thead with a set command go now
-	printf("Data line to be cached: ");
-	char *temp_data = (char * ) malloc(creq->bytes);
-	//if(!temp_data) remove_oldest_creq();
-	int input_success = scanf("%s", temp_data);
-	if(!input_success){
-		printf("Input error - quitting");
-		exit(1);
-	}
-	strcpy(creq->data, temp_data);
 
 	long hashedkey = hash(creq->key);
 
@@ -263,14 +255,6 @@ ccache_set(creq_t *creq){
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
 	pthread_mutex_lock(&cvect_counter_mutex);
 	pairs_counter++;
-
-	#if DEBUG
-		printf("Checking at the end of SET to see if data was stored correctly:\n");
-		lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect);
-		node_t *check_node = (node_t *) lookup_result;
-		printf("check set key: %s\n", check_node->creq->key);
-		printf("check set data: %s\n", check_node->creq->data);
-	#endif /* DEBUG */
 	
 	//release all the locks: cvect structure, the pairs structure, the pairs counter
 	pthread_mutex_unlock(&cvect_counter_mutex);
@@ -441,7 +425,7 @@ ccache_req_parse(char *cmd){
 		if(creq->type == CGET){
 			ccache_get(creq);
 			//This is definitely the last GET to be processed regardless of # of input tokens so send END
-			printf("END\r\n");
+			write_to_socket("END\r\n");
 		}
 		else if(creq->type == CSET) {
 			ccache_set(creq);
@@ -519,20 +503,18 @@ int
 ccache_resp_send(creq_t *creq){	
 	//TESTING CODE - just going to print out the values for now - should eventually send data through a socket
 	//printf("%s", creq->resp.header);
-	int n;
-	n = write(g_socketfd, creq->resp.header, creq->resp.head_sz);
-	if (n < 0) goto socket_error;
+	//int n;
+	//n = write(g_socketfd, creq->resp.header, creq->resp.head_sz);
+	//if (n < 0) goto socket_error;
+	write_to_socket(creq->resp.header);
 	if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
 		//printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
-		n = write(g_socketfd, creq->resp.footer, creq->resp.foot_sz);
-		if (n < 0) goto socket_error;
+		//n = write(g_socketfd, creq->resp.footer, creq->resp.foot_sz);
+		//if (n < 0) goto socket_error;
+		write_to_socket(creq->resp.footer);
 	}
 
 	return 0;
-
-	socket_error:
-		printf("Error writing to the socket");
-		exit(1);
 }
 
 

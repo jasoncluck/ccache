@@ -1,21 +1,29 @@
 /* A simple server in the internet domain using TCP
    The port number is passed as an argument */
-#include <stdio.h>
-#include <stdlib.h>
-#include <string.h>
-#include <unistd.h>
-#include <sys/types.h> 
-#include <sys/socket.h>
-#include <netinet/in.h>
+
 
 #include <ccache.h>
-
-#define BUFFER_SIZE 1025
+#include <ccache_socket.h>
 
 void error(const char *msg)
 {
     perror(msg);
     exit(1);
+}
+
+int write_to_socket(char *str){
+    int n;
+    n = write(newsockfd, str, strlen(str));
+    return n;
+}
+
+char *read_from_socket(){
+    int n;
+    bzero(buffer,BUFFER_SIZE);
+    n = read(newsockfd,buffer,BUFFER_SIZE-1);
+    if (n < 0) error("ERROR reading from socket");
+    printf("Here is the message: %s\n",buffer);
+    return buffer;
 }
 
 int main(int argc, char *argv[])
@@ -33,9 +41,9 @@ int main(int argc, char *argv[])
 
 
     /* socket code */
-    int sockfd, newsockfd, portno;
+    int sockfd, portno;
     socklen_t clilen;
-    char buffer[BUFFER_SIZE];
+    
     struct sockaddr_in serv_addr, cli_addr;
     int n;
 
@@ -57,12 +65,7 @@ int main(int argc, char *argv[])
              &clilen);
     if (newsockfd < 0) error("ERROR on accept");
     while(1){
-        bzero(buffer,BUFFER_SIZE);
-        n = read(newsockfd,buffer,BUFFER_SIZE-1);
-        if (n < 0) error("ERROR reading from socket");
-        printf("Here is the message: %s\n",buffer);
-        n = write(newsockfd,"I got your message",18);
-
+        read_from_socket();
         /* process the command */
         add_req_to_buffer(newsockfd, buffer);
         sleep(1);
