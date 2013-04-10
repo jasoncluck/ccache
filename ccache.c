@@ -7,8 +7,6 @@
 struct pair pairs[1<<10];
 cvect_t *dyn_vect;
 int pairs_counter;
-int set_flag;
-char * g_set_data = "";
 CB_t *cb;
 
 /* threads */
@@ -18,7 +16,7 @@ pthread_mutex_t cvect_mutex;
 pthread_mutex_t cvect_pairs_mutex;
 pthread_mutex_t cvect_counter_mutex;
 pthread_mutex_t buffer_mutex;
-pthread_mutex_t set_data_mutex;
+pthread_mutex_t output_buffer_mutex;
 sem_t buffer_sem;
 sem_t set_data_sem;
 int g_socketfd = 0;
@@ -36,8 +34,9 @@ thread_start(void *id){
 		char * cmd = pop(cb);
 		pthread_mutex_unlock(&buffer_mutex);
 
-		if (!set_flag) ccache_req_parse(cmd);
-		else ccache_add_set_data(cmd);
+		ccache_req_parse(cmd);
+		sem_post(&input_buffer_sem); //increment the semaphore because a new command is in the buffer
+
 	}
 	printf("Thread %d has reached a part of code that shouldn't be executing! Quitting\n", (int) id);
 	exit(1);
@@ -106,7 +105,7 @@ thread_pool_init(){
 	pthread_mutex_init(&cvect_counter_mutex, NULL);
 	pthread_mutex_init(&cvect_pairs_mutex, NULL);
 	pthread_mutex_init(&buffer_mutex, NULL);
-	pthread_mutex_init(&set_data_mutex, NULL);
+	pthread_mutex_init(&output_buffer_mutex, NULL);
 	sem_init(&buffer_sem, 0, -1); //turn off forks - can't do this in Linux anyways.  Initial value of -1, non-negative values stop threads from blocking
 	sem_init(&set_data_sem, 0, -1);
 
@@ -115,9 +114,11 @@ thread_pool_init(){
 int 
 command_buffer_init(){
 	/* socket buffer */
-	cb = malloc(sizeof(*cb));
+	cb = malloc(sizeof(CB_t));
 	assert(cb);
 	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
+	
+
 	return 0;
 }
 
@@ -187,34 +188,18 @@ ccache_get(creq_t *creq){
 	return 0;
 }
 
-
-/* Helper method for adding data to the set command
- * Only triggered via a set creq being processed.
-*/
-int
-ccache_add_set_data(char *creq_data){
-	printf("in ccache add_set data");
-	g_set_data = creq_data; //set the data to a global, only one thread is going due to mutex
-	set_flag = 0;
-	sem_post(&set_data_sem); //increment the semaphore because a new command is in the buffer
-	return 0;
-}
-
-
-
 int 
 ccache_set(creq_t *creq){
 
-	pthread_mutex_lock(&set_data_mutex);
-	set_flag = 1;
-	sem_wait(&set_data_sem); // wait for the data to be inserted into the queue
-	creq->data = g_set_data; // set the global data to the 
-	pthread_mutex_unlock(&set_data_mutex); //let another thead with a set command go now
+	
+	//sem_post(&input_buffer_sem); //increment the semaphore because a new command is in the buffer
 
+	//sem_wait(&set_data_sem); // wait for the data to be inserted into the queue
+	//creq->data = read_from_socket();
+	creq->data = "foo";
 	long hashedkey = hash(creq->key);
 
 	/* create the new pair and the new node that is the pairs value */
-	pthread_mutex_lock(&cvect_pairs_mutex);
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
@@ -387,28 +372,6 @@ ccache_req_parse(char *cmd){
 		//TODO: Now call ccache_req_process(creq_t *r) to fill in the data portion and the rest of the struct
 	}
 
-
-	/* Debug info */
-	#if DEBUG
-	switch(creq->type){
-		case CGET:
-			printf("type: %i\n", creq->type);
-			printf("key: %s\n", creq->key);
-			break;	
-		case CSET:
-			printf("type: %i\n", creq->type);
-			printf("key: %s\n", creq->key);
-			printf("flags: %i\n", creq->flags);
-			printf("exp_time: %i\n", creq->exp_time);
-			printf("bytes: %i\n", creq->bytes);
-			break;
-		case CDELETE:
-			printf("type: %i\n", creq->type);
-			printf("key: %s\n", creq->key);
-			break;
-	}
-	#endif /* DEBUG */
-
 	/* check counter for the type - client errors */
 	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
 		|| (creq->type == CDELETE && counter != 2)){
@@ -425,7 +388,9 @@ ccache_req_parse(char *cmd){
 		if(creq->type == CGET){
 			ccache_get(creq);
 			//This is definitely the last GET to be processed regardless of # of input tokens so send END
-			write_to_socket("END\r\n");
+			pthread_mutex_lock(&output_buffer_mutex);
+			push("END\r\n", output_cb);
+			pthread_mutex_unlock(&output_buffer_mutex);
 		}
 		else if(creq->type == CSET) {
 			ccache_set(creq);
@@ -473,13 +438,14 @@ ccache_resp_synth(creq_t *creq){
 				
 				creq->resp.header = (char * ) malloc(1<<8);
 				creq->resp.footer = (char * ) malloc(creq->bytes);
-				if(creq->resp.header == NULL|| creq->resp.footer == NULL) exit(1);
+				if(creq->resp.header == NULL || creq->resp.footer == NULL) exit(1);
 
 				//only populate the fields if no errors were encountered
 				if(!creq->resp.errcode){
-					creq->resp.head_sz = sprintf(creq->resp.header, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
-					creq->resp.foot_sz = sprintf(creq->resp.footer, "%s\r\n", creq->data);
+					creq->resp.head_sz = snprintf(creq->resp.header, 1<<8, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
+					creq->resp.foot_sz = snprintf(creq->resp.footer, creq->bytes, "%s\r\n", creq->data);
 				}
+
 				break;
 			case CDELETE:
 				creq->resp.header = (char * ) malloc(16);	
@@ -506,13 +472,20 @@ ccache_resp_send(creq_t *creq){
 	//int n;
 	//n = write(g_socketfd, creq->resp.header, creq->resp.head_sz);
 	//if (n < 0) goto socket_error;
-	write_to_socket(creq->resp.header);
+	//write_to_socket(creq->resp.header, strlen(creq->resp.header));
+	pthread_mutex_lock(&output_buffer_mutex);
+	push(creq->resp.header, output_cb);
+	pthread_mutex_unlock(&output_buffer_mutex);
 	if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
 		//printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
 		//n = write(g_socketfd, creq->resp.footer, creq->resp.foot_sz);
 		//if (n < 0) goto socket_error;
-		write_to_socket(creq->resp.footer);
+		//write_to_socket(creq->resp.footer, creq->bytes);
+		pthread_mutex_lock(&output_buffer_mutex);
+		push(creq->resp.footer, output_cb);
+		pthread_mutex_unlock(&output_buffer_mutex);
 	}
+	//increment the semaphore for taking in input
 
 	return 0;
 }

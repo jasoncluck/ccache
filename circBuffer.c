@@ -40,7 +40,7 @@ char * pop(CB_t *cb){
 	
 	//check to see if the buffer is empty.
 	if(cb->tail == cb->head){
-		return "";
+		return "empty";
 	}
 
 	char * returnval = cb->buffer[cb->tail];

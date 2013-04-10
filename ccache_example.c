@@ -11,9 +11,9 @@ void error(const char *msg)
     exit(1);
 }
 
-int write_to_socket(char *str){
+int write_to_socket(char *str, int sz){
     int n;
-    n = write(newsockfd, str, strlen(str));
+    n = write(newsockfd, str, sz);
     return n;
 }
 
@@ -22,7 +22,6 @@ char *read_from_socket(){
     bzero(buffer,BUFFER_SIZE);
     n = read(newsockfd,buffer,BUFFER_SIZE-1);
     if (n < 0) error("ERROR reading from socket");
-    printf("Here is the message: %s\n",buffer);
     return buffer;
 }
 
@@ -33,6 +32,14 @@ int main(int argc, char *argv[])
     assert(dyn_vect);
     if(thread_pool_init()) goto mem_error;
     if(command_buffer_init()) goto mem_error;
+
+    /* output buffer init */
+    output_cb = malloc(sizeof(CB_t));
+    assert(output_cb);
+    buffer_init(output_cb, BUFFER_LENGTH, sizeof(char *));
+
+    /* semaphore for accepting socket input */
+    sem_init(&input_buffer_sem, 0, -1); //start at 1 for the first request
 
     if(argc < 2){
         fprintf(stderr, "ERROR, no port provided\n");
@@ -65,10 +72,19 @@ int main(int argc, char *argv[])
              &clilen);
     if (newsockfd < 0) error("ERROR on accept");
     while(1){
+        /* check to see if anything needs to be outputted over the socket */
+        char *output;
+        output = pop(output_cb);
+
+        while(strcmp(output, "empty") != 0){
+            write_to_socket(output, strlen(output));
+            output = pop(output_cb);
+        }
+
         read_from_socket();
         /* process the command */
         add_req_to_buffer(newsockfd, buffer);
-        sleep(1);
+        sem_wait(&input_buffer_sem);
     }
 
     if (n < 0) error("ERROR writing to socket");

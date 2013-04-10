@@ -25,7 +25,7 @@
 #include "cvect.h"
 
 /* Concurrency */
-#define MAX_CONCURRENCY 4
+#define MAX_CONCURRENCY 1
 
 /* linked list */
 #include "creqlinkedlist.h"
