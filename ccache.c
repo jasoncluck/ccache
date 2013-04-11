@@ -35,7 +35,6 @@ thread_start(void *id){
 		pthread_mutex_unlock(&buffer_mutex);
 
 		ccache_req_parse(cmd);
-		//sem_post(&input_buffer_sem); //increment the semaphore so a new command can be issued
 
 	}
 	printf("Thread %d has reached a part of code that shouldn't be executing! Quitting\n", (int) id);
