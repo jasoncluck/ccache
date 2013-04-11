@@ -77,8 +77,10 @@ int main(int argc, char *argv[])
         output = pop(output_cb);
 
         
-
+        /* read data and remove the newline */
         read_from_socket();
+        buffer[strlen(buffer)-1] = '\0';
+
         /* process the command */
         add_req_to_buffer(newsockfd, buffer);
         //sem_wait(&input_buffer_sem);

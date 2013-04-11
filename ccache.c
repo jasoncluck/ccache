@@ -149,7 +149,10 @@ ccache_get(creq_t *creq){
 	getpair.id = hashedkey;
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
+	printf("key: %s, hash: %i\n", creq->key, hashedkey);
+
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
+		printf("inside with key: %s", creq->key);
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
 		creq->resp.errcode = NOERROR;
 		while(1){
@@ -171,17 +174,6 @@ ccache_get(creq_t *creq){
 	}
 	pthread_mutex_unlock(&cvect_mutex);
 
-	#if DEBUG
-		printf("\nDEBUG SECTION OF GET\n");
-		printf("type: %i\n", creq->type);
-		printf("key: %s\n", creq->key);
-		printf("flags: %i\n", creq->flags);
-		printf("exp_time: %i\n", creq->exp_time);
-		printf("bytes: %i\n", creq->bytes);
-		printf("data: %s\n", creq->data);
-		printf("END GET DEBUG\n\n");
-	#endif /* DEBUG */
-
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
 
@@ -197,7 +189,7 @@ ccache_set(creq_t *creq){
 	//creq->data = read_from_socket();
 	creq->data = "foo";
 	long hashedkey = hash(creq->key);
-
+	printf("key: %s, hash: %i\n\n", creq->key, hashedkey);
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
@@ -383,7 +375,6 @@ ccache_req_parse(char *cmd){
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
 		if(creq->type == CGET){
 			ccache_get(creq);
-			push(creq->key, output_cb);
 			//This is definitely the last GET to be processed regardless of # of input tokens so send END
 			push("END\r\n", output_cb);
 		}
