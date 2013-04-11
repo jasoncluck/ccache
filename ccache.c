@@ -35,7 +35,7 @@ thread_start(void *id){
 		pthread_mutex_unlock(&buffer_mutex);
 
 		ccache_req_parse(cmd);
-		sem_post(&input_buffer_sem); //increment the semaphore because a new command is in the buffer
+		//sem_post(&input_buffer_sem); //increment the semaphore so a new command can be issued
 
 	}
 	printf("Thread %d has reached a part of code that shouldn't be executing! Quitting\n", (int) id);
@@ -166,7 +166,7 @@ ccache_get(creq_t *creq){
 		}
 	}
 	else{
-		
+
 		creq->resp.errcode = RERROR;
 	}
 	pthread_mutex_unlock(&cvect_mutex);
@@ -184,10 +184,9 @@ ccache_get(creq_t *creq){
 
 	ccache_resp_synth(creq);
 	ccache_resp_send(creq);
-	
+
 	return 0;
 }
-
 int 
 ccache_set(creq_t *creq){
 
@@ -204,8 +203,6 @@ ccache_set(creq_t *creq){
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
-	//if(!pairs[pairs_counter].val) remove_oldest_creq();
-	//if(!insert_dll) remove_oldest_creq();
 	
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -311,7 +308,6 @@ ccache_req_parse(char *cmd){
 	//Can start by tokenizing this data, and determining what type of command it is.
 
 	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
-	if(creq == NULL) exit(1);
 	//printf("%s\n", cmd);
 	char * pch;
 	pch = strtok(cmd, " ");
@@ -353,7 +349,6 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes);
-		 				if(creq->data == NULL) exit(1);
 		 			}
 		 			else{
 		 				break;
@@ -372,12 +367,13 @@ ccache_req_parse(char *cmd){
 		//TODO: Now call ccache_req_process(creq_t *r) to fill in the data portion and the rest of the struct
 	}
 
+
 	/* check counter for the type - client errors */
 	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
 		|| (creq->type == CDELETE && counter != 2)){
 		creq->resp.errcode = CERROR;
 	}
-	
+
 	/* deal with any parsing errors */
 	if(creq->resp.errcode == ERROR || creq->resp.errcode == CERROR){
 		ccache_resp_synth(creq);
@@ -387,10 +383,9 @@ ccache_req_parse(char *cmd){
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
 		if(creq->type == CGET){
 			ccache_get(creq);
+			push(creq->key, output_cb);
 			//This is definitely the last GET to be processed regardless of # of input tokens so send END
-			pthread_mutex_lock(&output_buffer_mutex);
 			push("END\r\n", output_cb);
-			pthread_mutex_unlock(&output_buffer_mutex);
 		}
 		else if(creq->type == CSET) {
 			ccache_set(creq);
@@ -475,18 +470,16 @@ ccache_resp_send(creq_t *creq){
 	//write_to_socket(creq->resp.header, strlen(creq->resp.header));
 	pthread_mutex_lock(&output_buffer_mutex);
 	push(creq->resp.header, output_cb);
-	pthread_mutex_unlock(&output_buffer_mutex);
 	if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
 		//printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
 		//n = write(g_socketfd, creq->resp.footer, creq->resp.foot_sz);
 		//if (n < 0) goto socket_error;
 		//write_to_socket(creq->resp.footer, creq->bytes);
-		pthread_mutex_lock(&output_buffer_mutex);
+		
 		push(creq->resp.footer, output_cb);
-		pthread_mutex_unlock(&output_buffer_mutex);
+		
 	}
-	//increment the semaphore for taking in input
-
+	pthread_mutex_unlock(&output_buffer_mutex);
 	return 0;
 }
 

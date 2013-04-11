@@ -76,15 +76,20 @@ int main(int argc, char *argv[])
         char *output;
         output = pop(output_cb);
 
-        while(strcmp(output, "empty") != 0){
-            write_to_socket(output, strlen(output));
-            output = pop(output_cb);
-        }
+        
 
         read_from_socket();
         /* process the command */
         add_req_to_buffer(newsockfd, buffer);
-        sem_wait(&input_buffer_sem);
+        //sem_wait(&input_buffer_sem);
+        sleep(1);
+        while(1){
+            output = pop(output_cb);
+            if(strcmp(output, "empty") == 0) break;
+            write_to_socket(output, strlen(output));
+            
+        }
+        sleep(1);
     }
 
     if (n < 0) error("ERROR writing to socket");
