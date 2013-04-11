@@ -148,10 +148,8 @@ ccache_get(creq_t *creq){
 	getpair.id = hashedkey;
 	void * lookup_result;
 	pthread_mutex_lock(&cvect_mutex);
-	printf("key: %s, hash: %i\n", creq->key, hashedkey);
 
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
-		printf("inside with key: %s", creq->key);
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
 		creq->resp.errcode = NOERROR;
 		while(1){
@@ -188,13 +186,15 @@ ccache_set(creq_t *creq){
 	//creq->data = read_from_socket();
 	creq->data = "foo";
 	long hashedkey = hash(creq->key);
-	printf("key: %s, hash: %i\n\n", creq->key, hashedkey);
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
 	
+	if(pairs[pairs_counter].val == NULL) remove_least_recently_used();
+	if(insert_dll == NULL) remove_least_recently_used();
+
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
 
@@ -299,7 +299,7 @@ ccache_req_parse(char *cmd){
 	//Can start by tokenizing this data, and determining what type of command it is.
 
 	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
-	//printf("%s\n", cmd);
+	if(creq == NULL) remove_least_recently_used();
 	char * pch;
 	pch = strtok(cmd, " ");
 	int counter = 0;
@@ -340,6 +340,7 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes);
+		 				if(creq->data == NULL) remove_least_recently_used();
 		 			}
 		 			else{
 		 				break;
@@ -391,7 +392,7 @@ int
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
-		if(creq->resp.header == NULL) exit(1);
+		if(creq->resp.header == NULL) remove_least_recently_used();
 		switch(creq->resp.errcode){
 			case ERROR: 
 				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
@@ -411,7 +412,7 @@ ccache_resp_synth(creq_t *creq){
 			case CSET:
 				// Configure the header based on whether the data was saved successfully or not 
 				creq->resp.header = (char * ) malloc(16);
-				if(creq->resp.header == NULL) exit(1);
+				if(creq->resp.header == NULL) remove_least_recently_used();
 				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
@@ -421,9 +422,10 @@ ccache_resp_synth(creq_t *creq){
 				// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
 				// Footer should be the data block
 				
-				creq->resp.header = (char * ) malloc(1<<8);
+				creq->resp.header = (char * ) malloc(1<<8);		
 				creq->resp.footer = (char * ) malloc(creq->bytes);
-				if(creq->resp.header == NULL || creq->resp.footer == NULL) exit(1);
+			
+				if(creq->resp.header == NULL || creq->resp.footer == NULL) remove_least_recently_used();
 
 				//only populate the fields if no errors were encountered
 				if(!creq->resp.errcode){
@@ -433,8 +435,8 @@ ccache_resp_synth(creq_t *creq){
 
 				break;
 			case CDELETE:
-				creq->resp.header = (char * ) malloc(16);	
-				if(creq->resp.header == NULL) exit(1);
+				creq->resp.header = (char * ) malloc(16);
+				if(creq->resp.header == NULL) remove_least_recently_used();	
 
 				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
@@ -485,4 +487,28 @@ cvect_struct_free(cvect_t *dyn_vect){
 	cvect_free(dyn_vect);
 }
 
+void
+remove_least_recently_used(){
+	/* initialize random seed: */
+  	srand (time(NULL));
+
+  	//create a new pair for the cvect call and put the key in it.
+	struct pair getpair;
+
+	/* generate secret number between 1 and 10: */
+	getpair.id = rand() % CVECT_MAX_ID;
+	void * lookup_result;
+	pthread_mutex_lock(&cvect_mutex);
+
+	/* Check to see if this random id correlates to a cvect, if not keep getting a new random number*/
+	while(((lookup_result = do_lookups(&getpair, dyn_vect)) == 0)) {
+		getpair.id = rand() % CVECT_MAX_ID;
+	}
+	/* we now have a linked list with actual data in it so typecast it and pop off the tail*/
+	struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
+	remove_oldest_creq(cvect_list);
+	
+	pthread_mutex_unlock(&cvect_mutex);
+
+}
 

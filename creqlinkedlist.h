@@ -18,3 +18,6 @@ delete_creq(struct creq_linked_list * dll, creq_t * creq);
 
 int
 get_creq(struct creq_linked_list *dll, creq_t * creq);
+
+void 
+remove_oldest_creq(struct creq_linked_list *dll);

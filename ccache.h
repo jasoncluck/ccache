@@ -13,7 +13,7 @@
 #include <pthread.h>
 #include <semaphore.h>
 #include <unistd.h>
-
+#include <time.h>
 /* ccache native */
 #define MAX_CMD_SZ (1<<10)
 
@@ -111,3 +111,7 @@ thread_pool_init();
 /* initialize circular buffer for command */
 int 
 command_buffer_init();
+
+/* remote the least recently used (tail) node from a random cvect */
+void
+remove_least_recently_used();
