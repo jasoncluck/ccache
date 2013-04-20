@@ -9,11 +9,11 @@
 #include <sys/epoll.h>
 #include <netinet/in.h>
 #include <semaphore.h>
+#include <errno.h>
 
 
 #define BUFFER_SIZE 1025
 
-char buffer[BUFFER_SIZE];
-CB_t *output_cb;
+
 
 
