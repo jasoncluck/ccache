@@ -34,9 +34,6 @@
 #include "circBuffer.h"
 #define BUFFER_LENGTH 256
 
-/* Socket code */
-#include <ccache_socket.h>
-
 /* Turn debugging on */
 #define DEBUG 0
 
@@ -112,6 +109,4 @@ thread_pool_init();
 int 
 command_buffer_init();
 
-/* remote the least recently used (tail) node from a random cvect */
-void
-remove_least_recently_used();
+
