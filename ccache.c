@@ -101,7 +101,7 @@ ccache_get(creq_t *creq){
 	}
 
 	ccache_resp_synth(creq);
-	ccache_resp_send(creq);
+	//ccache_resp_send(creq);
 
 	return 0;
 }
@@ -156,7 +156,7 @@ ccache_set(creq_t *creq){
 	pairs_counter++;
 		
 	ccache_resp_synth(creq);
-	ccache_resp_send(creq);
+	//ccache_resp_send(creq);
 	
 	return 0;
 
@@ -202,8 +202,8 @@ ccache_delete(creq_t *creq){
 	
 	//search for creq->key in the hash table, if it exists delete it
 	ccache_resp_synth(creq);
-	ccache_resp_send(creq);
-	ccache_req_free(creq);
+	//ccache_resp_send(creq);
+	//ccache_req_free(creq); TODO: FIX THIS CLEANUP
 
 	return 0;
 }
@@ -286,7 +286,8 @@ ccache_req_parse(char *cmd){
 	/* deal with any parsing errors */
 	if(creq->resp.errcode == ERROR || creq->resp.errcode == CERROR){
 		ccache_resp_synth(creq);
-		ccache_resp_send(creq);
+
+		//ccache_resp_send(creq);
 	}
 	else{
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
