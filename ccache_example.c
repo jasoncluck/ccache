@@ -282,8 +282,7 @@ main (int argc, char *argv[])
                       break;
                     }
 
-                    /* remove trailing newline */
-                    buf[strlen(buf)-1] = '\0';
+                    
 
 
                     /* Process the buffered request and write the results to the output */
@@ -293,10 +292,12 @@ main (int argc, char *argv[])
                     // if((creq->type = is_complete_request(buf))) {
                     //     creq = ccache_req_parse(buf);
                     // }
-                    
+                    /* remove trailing newline */
+                    buf[strlen(buf)-1] = '\0';
                     creq = ccache_req_parse(buf);
 
                     /* Write Header and Footer to socket */
+                    printf("before header: %s, strlen: %i\n", creq->resp.header, strlen(creq->resp.header));
                     s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
                     if (s == -1)
                     {

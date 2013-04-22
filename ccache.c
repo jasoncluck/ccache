@@ -70,7 +70,7 @@ hash(char *str){
 
 
 /* The Following three functons populate the data. Initial parsing has already occurred */
-int 
+creq_t * 
 ccache_get(creq_t *creq){
 
 	//create a new pair for the cvect call and put the key in it.
@@ -78,6 +78,7 @@ ccache_get(creq_t *creq){
 	long hashedkey = hash(creq->key);
 	getpair.id = hashedkey;
 	void * lookup_result;
+	printf("get key: %s, hashedkey: %i\n", creq->key, hashedkey);
 
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
@@ -100,12 +101,12 @@ ccache_get(creq_t *creq){
 		creq->resp.errcode = RERROR;
 	}
 
-	ccache_resp_synth(creq);
+	creq = ccache_resp_synth(creq);
 	//ccache_resp_send(creq);
 
-	return 0;
+	return creq;
 }
-int 
+creq_t * 
 ccache_set(creq_t *creq){
 
 	
@@ -115,6 +116,7 @@ ccache_set(creq_t *creq){
 	//creq->data = read_from_socket();
 	creq->data = "foo";
 	long hashedkey = hash(creq->key);
+	printf("set key: %s, hashedkey: %i\n", creq->key, hashedkey);
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
@@ -155,15 +157,15 @@ ccache_set(creq_t *creq){
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
 	pairs_counter++;
 		
-	ccache_resp_synth(creq);
+	creq = ccache_resp_synth(creq);
 	//ccache_resp_send(creq);
 	
-	return 0;
+	return creq;
 
 }
 
 
-int 
+creq_t * 
 ccache_delete(creq_t *creq){
 
 	struct pair delete_pair;
@@ -201,11 +203,11 @@ ccache_delete(creq_t *creq){
 	}	
 	
 	//search for creq->key in the hash table, if it exists delete it
-	ccache_resp_synth(creq);
+	creq = ccache_resp_synth(creq);
 	//ccache_resp_send(creq);
 	//ccache_req_free(creq); TODO: FIX THIS CLEANUP
 
-	return 0;
+	return creq;
 }
 
 //Commands look like: <command name> <key> <flags> <exptime> <bytes> [noreply]\r\n
@@ -285,28 +287,28 @@ ccache_req_parse(char *cmd){
 
 	/* deal with any parsing errors */
 	if(creq->resp.errcode == ERROR || creq->resp.errcode == CERROR){
-		ccache_resp_synth(creq);
+		creq = ccache_resp_synth(creq);
 
 		//ccache_resp_send(creq);
 	}
 	else{
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
 		if(creq->type == CGET){
-			ccache_get(creq);
+			creq = ccache_get(creq);
 			//This is definitely the last GET to be processed regardless of # of input tokens so send END
 			//push("END\r\n", output_cb);
 		}
 		else if(creq->type == CSET) {
-			ccache_set(creq);
+			creq = ccache_set(creq);
 		}
 		else if(creq->type == CDELETE){ 
-			ccache_delete(creq);
+			creq = ccache_delete(creq);
 		}
 	}
 	return creq;
 }
 
-int 
+creq_t *
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
@@ -364,7 +366,7 @@ ccache_resp_synth(creq_t *creq){
 				break;
 		}
 	}
-	return 0;
+	return creq;
 }
 
 

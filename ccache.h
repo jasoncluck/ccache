@@ -55,21 +55,18 @@ ccache_req_parse(char *cmd);
 
 
 /* Populate the data, flags, and bytes */
-int ccache_get(creq_t *creq);
+creq_t *
+ccache_get(creq_t *creq);
 
-int 
-ccache_add_set_data(char *creq_data);
-
-
-int 
+creq_t *
 ccache_set(creq_t *creq);
 
-int 
+creq_t * 
 ccache_delete(creq_t *creq);
 
 
 /* Create the headers and footers to be sent (populating cresp) */
-int 
+creq_t * 
 ccache_resp_synth(creq_t *creq);
 
 /* Actually serialize the headers/footers/and the data */
