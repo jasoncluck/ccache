@@ -20,6 +20,14 @@
 
 #define MAXEVENTS 64
 
+/* Check to see if the request is actually complete. Also handles special cases
+depending on the command issued.*/
+static int
+is_complete_request(char *cmd){
+    
+}
+
+
 static int
 create_and_bind (char *port)
 {
@@ -89,7 +97,7 @@ make_socket_non_blocking (int sfd)
   return 0;
 }
 
-#define MAXEVENTS 64
+
 
 int
 main (int argc, char *argv[])
@@ -225,11 +233,11 @@ main (int argc, char *argv[])
 
                 while (1)
                 {
-                  ssize_t count;
-                  char buf[512];
+                    ssize_t count;
+                    char buf[512];
 
-                  count = read (events[i].data.fd, buf, sizeof buf);
-                  if (count == -1)
+                    count = read (events[i].data.fd, buf, sizeof buf);
+                    if (count == -1)
                     {
                       /* If errno == EAGAIN, that means we have read all
                          data. So go back to the main loop. */
@@ -252,7 +260,7 @@ main (int argc, char *argv[])
                     creq_t *creq = (creq_t *) sizeof(creq_t);
                     creq = ccache_req_parse(buf);
                     //printf("%s", creq->resp.header);
-                    s = write (events[i].data.fd, creq->resp.header, 100);
+                    s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
                     if (s == -1)
                     {
                         perror ("write");
@@ -260,7 +268,7 @@ main (int argc, char *argv[])
                     }
                     if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
                         //printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
-                        s = write (events[i].data.fd, creq->resp.footer, 100);
+                        s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer));
                         if (s == -1)
                         {
                             perror ("write");
