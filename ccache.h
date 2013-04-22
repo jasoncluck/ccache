@@ -17,7 +17,7 @@
 /* ccache native */
 #define MAX_CMD_SZ (1<<10)
 
-#include "creq.h"
+#include <creq.h>
 
 /* cvect stuff */
 #define COS_LINUX_ENV
@@ -55,8 +55,7 @@ ccache_req_parse(char *cmd);
 
 
 /* Populate the data, flags, and bytes */
-int 
-ccache_get(creq_t *creq);
+int ccache_get(creq_t *creq);
 
 int 
 ccache_add_set_data(char *creq_data);

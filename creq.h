@@ -5,7 +5,7 @@
 #include <stdlib.h>
 #define KEY_SIZE 255
 //enumeration for the basic commands
-typedef enum { CSET = 1, CGET = 2, CDELETE = 3 } ccmd_t;
+typedef enum {INVALID = 0, CSET = 1, CGET = 2, CDELETE = 3 } ccmd_t;
 //errors: reference error, no error, error, client error, server error
 typedef enum { RERROR = -1, NOERROR = 0, ERROR = 1, CERROR = 2, SERROR = 3 } error_t;
 

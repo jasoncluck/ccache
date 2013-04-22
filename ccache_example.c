@@ -17,14 +17,40 @@
 
 #include <ccache.h>
 #include <ccache_socket.h>
+#include <creq.h>
 
 #define MAXEVENTS 64
 
 /* Check to see if the request is actually complete. Also handles special cases
 depending on the command issued.*/
-static int
+static ccmd_t
 is_complete_request(char *cmd){
-    
+    /* first find out how many tokens there are in the command */
+    ccmd_t cmd_type;
+    char * pch;
+    pch = strtok(cmd, " ");
+    int counter = 0;
+    while(pch != NULL){
+        /* first find out what command the first token is */
+        if(counter == 0){
+            if(strcmp(pch, "get") == 0) cmd_type = CGET;
+            else if(strcmp(pch, "set") == 0) cmd_type = CSET;
+            else if(strcmp(pch, "delete") == 0) cmd_type = CDELETE;
+            else{
+                cmd_type = INVALID;
+            }
+        }
+        pch = strtok(NULL, " ");
+        counter++;
+    }
+
+
+    /* check counter for the type - client errors */
+    if((cmd_type == CGET && counter <= 1) || (cmd_type == CSET && counter != 5 )
+        || (cmd_type == CDELETE && counter != 2)){
+        cmd_type = INVALID;
+    }
+    return cmd_type;
 }
 
 
@@ -256,16 +282,28 @@ main (int argc, char *argv[])
                       break;
                     }
 
+                    /* remove trailing newline */
+                    buf[strlen(buf)-1] = '\0';
+
+
                     /* Process the buffered request and write the results to the output */
                     creq_t *creq = (creq_t *) sizeof(creq_t);
+
+                    /* Make sure this request is complete - can do special handling based on creq_type then */ 
+                    // if((creq->type = is_complete_request(buf))) {
+                    //     creq = ccache_req_parse(buf);
+                    // }
+                    
                     creq = ccache_req_parse(buf);
-                    //printf("%s", creq->resp.header);
+
+                    /* Write Header and Footer to socket */
                     s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
                     if (s == -1)
                     {
                         perror ("write");
                         abort ();
                     }
+
                     if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
                         //printf("%s", creq->resp.footer); //only print footer if no errors - gets rid of some of the gibberish
                         s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer));
@@ -273,8 +311,17 @@ main (int argc, char *argv[])
                         {
                             perror ("write");
                             abort ();
+                        } 
+                    }
+
+                    /* write the END line to the socket if request was a GET */
+                    if(creq->type == CGET){
+                        s = write (events[i].data.fd, "END\r\n", strlen("END\r\n"));
+                        if (s == -1)
+                        {
+                            perror ("write");
+                            abort ();
                         }
-                        
                     }
 
                     // s = write (events[i].data.fd, buf, count);
