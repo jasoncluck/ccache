@@ -16,10 +16,10 @@
 #include <string.h>
 
 #include <ccache.h>
-#include <ccache_socket.h>
 #include <creq.h>
 
 #define MAXEVENTS 64
+#define BUFFER_SIZE 512
 
 /* Check to see if the request is actually complete. Also handles special cases
 depending on the command issued.*/
@@ -256,11 +256,12 @@ main (int argc, char *argv[])
                  and won't get a notification again for the same
                  data. */
                 int done = 0;
-
+                char buf[BUFFER_SIZE];
                 while (1)
                 {
                     ssize_t count;
-                    char buf[512];
+                    bzero(buf,BUFFER_SIZE); //zero out the buffer every time 
+
 
                     count = read (events[i].data.fd, buf, sizeof buf);
                     if (count == -1)
