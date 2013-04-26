@@ -9,6 +9,8 @@ cvect_t *dyn_vect;
 int pairs_counter;
 CB_t *cb;
 
+/* Global linked list for least recently used list */
+struct creq_linked_list *lru_ll;
 
 
 /* See if an id is already in a pair */
@@ -33,10 +35,11 @@ do_lookups(struct pair *ps, cvect_t *v)
 cvect_t *
 ccache_init(void){
 	
-	/* Initialize cvect stuff */
+	/* Initialize cvect stuff and global lru list*/
 	dyn_vect = cvect_alloc();
 	assert(dyn_vect);
 	cvect_init(dyn_vect);
+	lru_ll = malloc(sizeof(struct creq_linked_list));
 
 	return dyn_vect;
 }
@@ -86,8 +89,22 @@ ccache_get(creq_t *creq){
 		creq->resp.errcode = NOERROR;
 		while(1){
 			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {
+				/* set this creq to be returned */
 				creq = cvect_list->head; 
 				creq->type = CGET;
+				/* update pointers for cvects ll and lru ll*/
+				creq->next = cvect_list->head; //set the current head to be the second node in the list
+				cvect_list->head = creq; //now change the head to be the new node (most recent)
+
+
+				/* rearrange the pointers and put the new data at the front of the global list */
+				creq_t *temp_creq = creq;
+				creq->next = creq->next->next;
+				creq = creq->next;
+				temp_creq->next = lru_ll->head;
+
+				//TODO: DO this for the local lists as well				
+
 				break;
 			}
 			else if(cvect_list->head->next == NULL) {
@@ -110,12 +127,6 @@ ccache_get(creq_t *creq){
 creq_t * 
 ccache_set(creq_t *creq){
 
-	
-	//sem_post(&input_buffer_sem); //increment the semaphore because a new command is in the buffer
-
-	//sem_wait(&set_data_sem); // wait for the data to be inserted into the queue
-	//creq->data = read_from_socket();
-	creq->data = "foo";
 	long hashedkey = hash(creq->key);
 
 	/* create the new pair and the new node that is the pairs value */
@@ -151,8 +162,10 @@ ccache_set(creq_t *creq){
 	}
 	else
 	{
-		//add the pair to the cvect
+		/* add the pair to the cvect and update the LRU list */
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+		add_creq(lru_ll, creq);
+
 	}	
 
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
