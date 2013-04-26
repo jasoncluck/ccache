@@ -10,6 +10,7 @@ int pairs_counter;
 CB_t *cb;
 
 
+
 /* See if an id is already in a pair */
 int 
 in_pairs(struct pair *ps, int len, long id)
@@ -78,7 +79,7 @@ ccache_get(creq_t *creq){
 	long hashedkey = hash(creq->key);
 	getpair.id = hashedkey;
 	void * lookup_result;
-	printf("get key: %s, hashedkey: %i\n", creq->key, hashedkey);
+
 
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
@@ -116,7 +117,7 @@ ccache_set(creq_t *creq){
 	//creq->data = read_from_socket();
 	creq->data = "foo";
 	long hashedkey = hash(creq->key);
-	printf("set key: %s, hashedkey: %i\n", creq->key, hashedkey);
+
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
@@ -223,6 +224,7 @@ ccache_req_parse(char *cmd){
 	pch = strtok(cmd, " ");
 	int counter = 0;
 	creq->resp.errcode = NOERROR;
+	
 	while(pch != NULL){
 		/* first find out what command the first token is */
 		if(counter == 0){
@@ -246,6 +248,7 @@ ccache_req_parse(char *cmd){
 					/* if we end up here there are more than one get requests
 					so process the current one and assemble the new one */
 					ccache_get(creq);
+					
 					strcpy(creq->key, pch); //update request with the next key
 					break;
 				/* set <key> <flags> <exptime> <bytes> [noreply]\r\n */
@@ -294,9 +297,8 @@ ccache_req_parse(char *cmd){
 	else{
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
 		if(creq->type == CGET){
+
 			creq = ccache_get(creq);
-			//This is definitely the last GET to be processed regardless of # of input tokens so send END
-			//push("END\r\n", output_cb);
 		}
 		else if(creq->type == CSET) {
 			creq = ccache_set(creq);
@@ -344,7 +346,7 @@ ccache_resp_synth(creq_t *creq){
 				
 				creq->resp.header = (char * ) malloc(1<<8);		
 				creq->resp.footer = (char * ) malloc(creq->bytes);
-			
+				
 				
 
 				//only populate the fields if no errors were encountered
