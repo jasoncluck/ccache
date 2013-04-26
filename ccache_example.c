@@ -260,12 +260,12 @@ main (int argc, char *argv[])
                     {
                       /* If errno == EAGAIN, that means we have read all
                          data. So go back to the main loop. */
-                      if (errno != EAGAIN)
+                        if (errno != EAGAIN)
                         {
                           perror ("read");
                           done = 1;
                         }
-                      break;
+                        break;
                     }
                     else if (count == 0)
                     {
@@ -291,20 +291,10 @@ main (int argc, char *argv[])
 
                         /* Write Header and Footer to socket */
                         printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
-                        s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
-                        if (s == -1)
-                        {
-                            perror ("write");
-                            abort ();
-                        }
+                        if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
 
                         if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-                            s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer));
-                            if (s == -1)
-                            {
-                                perror ("write");
-                                abort ();
-                            } 
+                            if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
                         }
                     }
                     /* CGET */
@@ -325,32 +315,18 @@ main (int argc, char *argv[])
                                         
                                 /* Write Header and Footer to socket */
                                 //printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
-                                s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
-                                if (s == -1)
-                                {
-                                    perror ("write");
-                                    abort ();
-                                }
+                                if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
+                               
 
                                 if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-                                    s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer));
-                                    if (s == -1)
-                                    {
-                                        perror ("write");
-                                        abort ();
-                                    } 
+                                    if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
                                 }
                             }
                             pch = strtok(NULL, " ");
                             counter++;
                         }
                         /* now that we're done transmitting all the CGET reqs - transmit END */
-                        s = write (events[i].data.fd, "END\r\n", strlen("END\r\n"));
-                        if (s == -1)
-                        {
-                            perror ("write");
-                            abort ();
-                        }
+                        if((s = write (events[i].data.fd, "END\r\n", strlen("END\r\n"))) == -1) goto write_error;
                     }
                     else if(type == CDELETE || type == INVALID){
                         creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
@@ -359,20 +335,11 @@ main (int argc, char *argv[])
 
                         /* Write Header and Footer to socket */
                         printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
-                        s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header));
-                        if (s == -1)
-                        {
-                            perror ("write");
-                            abort ();
-                        }
+                        if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
 
                         if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-                            s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer));
-                            if (s == -1)
-                            {
-                                perror ("write");
-                                abort ();
-                            } 
+                            if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
+                            
                         }
                         /* cleanup from delete */
                         free(creq);
@@ -398,9 +365,17 @@ main (int argc, char *argv[])
         }
     }
 
-  free (events);
+    free (events);
 
-  close (sfd);
+    close (sfd);
 
-  return EXIT_SUCCESS;
+    return EXIT_SUCCESS;
+
+    write_error:
+    if (s == -1)
+    {
+        perror ("write");
+        abort ();
+    }
+    return -1;
 }
