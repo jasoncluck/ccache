@@ -86,6 +86,7 @@ ccache_get(creq_t *creq){
 
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
+		
 		creq->resp.errcode = NOERROR;
 		while(1){
 			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {

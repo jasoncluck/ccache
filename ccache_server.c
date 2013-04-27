@@ -21,6 +21,10 @@
 #define MAXEVENTS 64
 #define BUFFER_SIZE 512
 
+creq_t *creq;
+int data_flag = 0;
+
+
 /* Check to see if the request is actually complete. Also handles special cases
 depending on the command issued.*/
 ccmd_t
@@ -174,17 +178,17 @@ main (int argc, char *argv[])
         n = epoll_wait (efd, events, MAXEVENTS, -1);
         for (i = 0; i < n; i++)
         {   
-        if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
-        {
-              /* An error has occured on this fd, or the socket is not
-                 ready for reading (why were we notified then?) */
-            fprintf (stderr, "epoll error\n");
-            close (events[i].data.fd);
-            continue;
-        }
+            if ((events[i].events & EPOLLERR) || (events[i].events & EPOLLHUP) || (!(events[i].events & EPOLLIN)))
+            {
+                  /* An error has occured on this fd, or the socket is not
+                     ready for reading (why were we notified then?) */
+                fprintf (stderr, "epoll error\n");
+                close (events[i].data.fd);
+                continue;
+            }
 
-        else if (sfd == events[i].data.fd)
-        {
+            else if (sfd == events[i].data.fd)
+            {
               /* We have a notification on the listening socket, which
                  means one or more incoming connections. */
                 while (1)
@@ -253,7 +257,6 @@ main (int argc, char *argv[])
                     ssize_t count;
                     bzero(buf,BUFFER_SIZE); //zero out the buffer every time 
 
-
                     count = read (events[i].data.fd, buf, sizeof buf);
                     if (count == -1)
                     {
@@ -276,24 +279,38 @@ main (int argc, char *argv[])
 
 
                     /* Process the buffered request and write the results to the output */
-                    
+
                     buf[strlen(buf)-1] = '\0'; //remove trailing newline
-                    /* Make sure this request is complete - can do special handling based on creq_type then */
-                    strcpy(localbuf, buf);
-                    ccmd_t type = get_creq_type(localbuf);
-                    strcpy(localbuf, buf);
-                    creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
-                    if(type == CSET) {
 
-                        creq = ccache_req_parse(buf); //now process that actual buffer
-
-                        /* Write Header and Footer to socket */
-                        printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
+                    if(data_flag){
+                        data_flag = 0;
+                        printf("buf: %s\n", buf);
+                        strcpy(creq->data, buf);
+                        
+                        creq = ccache_set(creq);
                         if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
 
                         if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
                             if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
                         }
+
+                        break;
+                    }
+
+
+                    /* Make sure this request is complete - can do special handling based on creq_type then */
+                    strcpy(localbuf, buf);
+                    ccmd_t type = get_creq_type(localbuf);
+                    strcpy(localbuf, buf);
+                    creq = (creq_t *) malloc(sizeof(creq_t));
+                    if(type == CSET) {
+
+                        creq = ccache_req_parse(buf); //now process that actual buffer
+                                                /* Write Header and Footer to socket */
+                        data_flag = 1;
+                        if((s = write (events[i].data.fd, "", 1)) == -1) goto write_error;
+
+                        
                     }
                     /* CGET */
                     else if(type == CGET){
@@ -312,7 +329,6 @@ main (int argc, char *argv[])
                                 creq = ccache_get(get_creq);
                                         
                                 /* Write Header and Footer to socket */
-                                //printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
                                 if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
                                
 
