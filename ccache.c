@@ -86,7 +86,7 @@ ccache_get(creq_t *creq){
 
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
-		
+
 		creq->resp.errcode = NOERROR;
 		while(1){
 			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {
@@ -99,10 +99,15 @@ ccache_get(creq_t *creq){
 
 
 				/* rearrange the pointers and put the new data at the front of the global list */
-				creq_t *temp_creq = creq;
-				creq->next = creq->next->next;
-				creq = creq->next;
-				temp_creq->next = lru_ll->head;
+				//TODO: FIX THIS!
+				// creq_t *temp_creq;
+				// temp_creq = creq;
+				// creq = creq->next;
+				// creq->next = creq->next->next;
+				
+				// // temp_creq->next = lru_ll->head;
+				// temp_creq.next = lru_ll->head->next;
+				// lru_ll->head = temp_creq;
 
 				//TODO: DO this for the local lists as well				
 
