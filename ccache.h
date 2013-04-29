@@ -74,7 +74,7 @@ int
 ccache_resp_send(creq_t *creq);
 
 /* This might need to decrement reference counts in the actual data itself */
-int 
+void 
 ccache_req_free(creq_t *creq); 
 
 /* Function to free up the cvect data structure - only called at the end of main */
@@ -104,5 +104,9 @@ thread_pool_init();
 /* initialize circular buffer for command */
 int 
 command_buffer_init();
+
+/* remove oldest creq for lru list */
+void
+remove_oldest_creq();
 
 

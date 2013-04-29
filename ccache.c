@@ -13,6 +13,14 @@ CB_t *cb;
 struct creq_linked_list *lru_ll;
 
 
+/* remove value from end of the global lru list if out of memory */
+void
+remove_oldest_creq(){
+	free(lru_ll->tail);
+	lru_ll->tail = NULL;
+}
+
+
 /* See if an id is already in a pair */
 int 
 in_pairs(struct pair *ps, int len, long id)
@@ -40,7 +48,7 @@ ccache_init(void){
 	assert(dyn_vect);
 	cvect_init(dyn_vect);
 	lru_ll = malloc(sizeof(struct creq_linked_list));
-
+	if(lru_ll == NULL) exit(1);
 	return dyn_vect;
 }
 
@@ -49,6 +57,7 @@ int
 command_buffer_init(){
 	/* socket buffer */
 	cb = malloc(sizeof(CB_t));
+	if(cb == NULL) exit(1);
 	assert(cb);
 	buffer_init(cb, BUFFER_LENGTH, sizeof(char *));
 	
@@ -85,17 +94,24 @@ ccache_get(creq_t *creq){
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
 		creq->resp.errcode = NOERROR;
+		creq_t * runner = cvect_list->head;
 		while(1){
-			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {
-				creq = cvect_list->head; 
+			if(!(strncmp(runner->key, creq->key, KEY_SIZE))) {
+				creq = runner; 
 				creq->type = CGET;
+
+				/* update global linked list */
+				//move the runner node to the front of the list
+				
+
+
 				break;
 			}
-			else if(cvect_list->head->next == NULL) {
+			else if(runner->next == NULL) {
 				creq->resp.errcode = RERROR;
 				break;
 			} 
-			else cvect_list->head = cvect_list->head->next;
+			else runner = runner->next;
 		}
 	}
 	else{
@@ -117,8 +133,18 @@ ccache_set(creq_t *creq){
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	while(pairs[pairs_counter].val == NULL){
+	 	remove_oldest_creq();
+	 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+
+	}
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
+	while(insert_dll == NULL){
+	 	remove_oldest_creq();
+	 	insert_dll = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	}
+
 
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -146,6 +172,8 @@ ccache_set(creq_t *creq){
 	{
 		//add the pair to the cvect
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
+		add_creq(lru_ll, creq);
+
 	}	
 
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
@@ -176,13 +204,13 @@ ccache_delete(creq_t *creq){
 			if(cvect_list->head->next == NULL){
 				creq->resp.errcode = cvect_del(dyn_vect, delete_pair.id);	
 				if(creq->resp.errcode == NOERROR){
-					//counter is always inside of cvect lock so this probably isn't needed...
 					pairs_counter--;	
 				} 
 			} 
 			else{
 				//if there is another node after the first one - have to change the cvect pointer. also get rid of cvect_list->head's data
 				memcpy(cvect_list->head, cvect_list->head->next, sizeof(creq_t));
+
 				free(cvect_list->head->next);
 			}			
 		}
@@ -197,7 +225,6 @@ ccache_delete(creq_t *creq){
 
 	//search for creq->key in the hash table, if it exists delete it
 	ccache_resp_synth(creq);
-	ccache_req_free(creq);
 
 	return creq;
 }
@@ -210,6 +237,10 @@ ccache_req_parse(char *cmd){
 	//Can start by tokenizing this data, and determining what type of command it is.
 
 	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
+	while(creq == NULL){
+		remove_oldest_creq();
+		creq = (creq_t *) malloc(sizeof(creq_t));
+	}
 	
 	char * pch;
 	pch = strtok(cmd, " ");
@@ -253,6 +284,11 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes + 7);
+		 				while(creq->data == NULL){
+		 					remove_oldest_creq();
+		 					creq->data = (char *) malloc(creq->bytes + 7);
+
+		 				}
 		 				
 		 			}
 		 			else{
@@ -305,7 +341,10 @@ creq_t *
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
 		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
-		
+		while(creq->resp.header == NULL){
+			remove_oldest_creq();
+			creq->resp.header = (char *) malloc(16);
+		}
 		switch(creq->resp.errcode){
 			case ERROR: 
 				sprintf(creq->resp.header, "ERROR That command was not recognized - must be get, set, or delete\r\n");
@@ -325,7 +364,10 @@ ccache_resp_synth(creq_t *creq){
 			case CSET:
 				// Configure the header based on whether the data was saved successfully or not 
 				creq->resp.header = (char * ) malloc(16);
-				
+				while(creq->resp.header == NULL){
+					remove_oldest_creq();
+					creq->resp.header = (char *) malloc(16);
+				}				
 				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
@@ -335,8 +377,16 @@ ccache_resp_synth(creq_t *creq){
 				// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
 				// Footer should be the data block
 				
-				creq->resp.header = (char * ) malloc(1<<8);	
+				creq->resp.header = (char * ) malloc(1<<8);
+				while(creq->resp.header == NULL){
+					remove_oldest_creq();
+					creq->resp.header = (char *) malloc(1<<8);
+				}	
 				creq->resp.footer = (char * ) malloc(creq->bytes + 3);
+				while(creq->resp.footer == NULL){
+					remove_oldest_creq();
+					creq->resp.footer = (char *) malloc(creq->bytes + 3);
+				}
 				
 				
 
@@ -349,6 +399,10 @@ ccache_resp_synth(creq_t *creq){
 				break;
 			case CDELETE:
 				creq->resp.header = (char * ) malloc(16);
+				while(creq->resp.header == NULL){
+					remove_oldest_creq();
+					creq->resp.header = (char *) malloc(16);
+				}
 				
 				if(!creq->resp.errcode) creq->resp.head_sz = sprintf(creq->resp.header, "DELETED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_FOUND\r\n");
@@ -376,13 +430,14 @@ ccache_resp_send(creq_t *creq){
 }
 
 
-int 
+void 
 ccache_req_free(creq_t *creq){
 	free(creq);
-	return 0;
+	creq = NULL;
 }
 
-void 
+void
+
 cvect_struct_free(cvect_t *dyn_vect){
 	cvect_free(dyn_vect);
 }

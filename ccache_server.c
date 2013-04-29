@@ -321,6 +321,10 @@ main (int argc, char *argv[])
                             if(counter != 0){
                                 /* formulate this new request and then skip the parsing step */
                                 creq_t *get_creq = (creq_t *) malloc(sizeof(creq_t));
+                                if(get_creq == NULL){
+                                  remove_oldest_creq();
+                                  get_creq = (creq_t *) malloc(sizeof(creq_t));
+                                }
                                 strcpy(get_creq->key, pch);
                                 get_creq->type = CGET;
 
