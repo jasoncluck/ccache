@@ -282,9 +282,8 @@ main (int argc, char *argv[])
 
                     buf[strlen(buf)-1] = '\0'; //remove trailing newline
 
-                    if(data_flag){
+                    if(data_flag && creq->resp.errcode == NOERROR){
                         data_flag = 0;
-                        printf("buf: %s\n", buf);
                         strcpy(creq->data, buf);
                         
                         creq = ccache_set(creq);
@@ -306,7 +305,6 @@ main (int argc, char *argv[])
                     if(type == CSET) {
 
                         creq = ccache_req_parse(buf); //now process that actual buffer
-                                                /* Write Header and Footer to socket */
                         data_flag = 1;
                         if((s = write (events[i].data.fd, "", 1)) == -1) goto write_error;
 
@@ -348,15 +346,12 @@ main (int argc, char *argv[])
                         creq = ccache_req_parse(buf); //now process that actual buffer
 
                         /* Write Header and Footer to socket */
-                        printf("before header: %s, strlen: %i\n", buf, strlen(creq->resp.header));
                         if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
 
                         if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
                             if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
                             
                         }
-                        /* cleanup from delete */
-                        free(creq);
                     }
                     else{
                         printf("error! exiting\n");

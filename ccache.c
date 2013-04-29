@@ -82,35 +82,13 @@ ccache_get(creq_t *creq){
 	long hashedkey = hash(creq->key);
 	getpair.id = hashedkey;
 	void * lookup_result;
-
-
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
-
 		creq->resp.errcode = NOERROR;
 		while(1){
 			if(!(strncmp(cvect_list->head->key, creq->key, KEY_SIZE))) {
-				/* set this creq to be returned */
 				creq = cvect_list->head; 
 				creq->type = CGET;
-				/* update pointers for cvects ll and lru ll*/
-				creq->next = cvect_list->head; //set the current head to be the second node in the list
-				cvect_list->head = creq; //now change the head to be the new node (most recent)
-
-
-				/* rearrange the pointers and put the new data at the front of the global list */
-				//TODO: FIX THIS!
-				// creq_t *temp_creq;
-				// temp_creq = creq;
-				// creq = creq->next;
-				// creq->next = creq->next->next;
-				
-				// // temp_creq->next = lru_ll->head;
-				// temp_creq.next = lru_ll->head->next;
-				// lru_ll->head = temp_creq;
-
-				//TODO: DO this for the local lists as well				
-
 				break;
 			}
 			else if(cvect_list->head->next == NULL) {
@@ -125,12 +103,13 @@ ccache_get(creq_t *creq){
 		creq->resp.errcode = RERROR;
 	}
 
-	creq = ccache_resp_synth(creq);
-	//ccache_resp_send(creq);
+	ccache_resp_synth(creq);
 
 	return creq;
 }
-creq_t * 
+
+
+creq_t *
 ccache_set(creq_t *creq){
 
 	long hashedkey = hash(creq->key);
@@ -140,8 +119,6 @@ ccache_set(creq_t *creq){
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
-	
-	
 
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -153,7 +130,6 @@ ccache_set(creq_t *creq){
 		struct creq_linked_list *cvect_dll = (struct creq_linked_list *) lookup_result;
 		while(1){
 			if(!(strcmp(insert_dll->head->key, cvect_dll->head->key))) {
-				//memcpy(head, insert_node, sizeof(node_t)); //just copy over the memory overwriting all the old fields
 				cvect_dll->head = insert_dll->head;
 				break;
 			}
@@ -164,22 +140,19 @@ ccache_set(creq_t *creq){
 			else cvect_dll->head = cvect_dll->head->next;
 		}
 		//at this point head.next == null so set head.next to the insert node
-		
+
 	}
 	else
 	{
-		/* add the pair to the cvect and update the LRU list */
+		//add the pair to the cvect
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
-		add_creq(lru_ll, creq);
-
 	}	
 
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
 	pairs_counter++;
-		
-	creq = ccache_resp_synth(creq);
-	//ccache_resp_send(creq);
-	
+
+	ccache_resp_synth(creq);
+
 	return creq;
 
 }
@@ -191,12 +164,12 @@ ccache_delete(creq_t *creq){
 	struct pair delete_pair;
 	long hashedkey = hash(creq->key);
 	delete_pair.id = hashedkey;	
-	
+
 	void * lookup_result;
 	if((lookup_result = do_lookups(&delete_pair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; //if non-zero we can typecast this without seg faulting	
 		creq->resp.errcode = NOERROR;
-		
+
 		//check the first node
 		if(!(strcmp(cvect_list->head->key, creq->key))){
 			//if there is nothing after the first node, just delete the whole cvect bucket
@@ -221,11 +194,10 @@ ccache_delete(creq_t *creq){
 		//Data not found in cvect, return error
 		creq->resp.errcode = RERROR;
 	}	
-	
+
 	//search for creq->key in the hash table, if it exists delete it
-	creq = ccache_resp_synth(creq);
-	//ccache_resp_send(creq);
-	//ccache_req_free(creq); TODO: FIX THIS CLEANUP
+	ccache_resp_synth(creq);
+	ccache_req_free(creq);
 
 	return creq;
 }
@@ -280,7 +252,7 @@ ccache_req_parse(char *cmd){
 					}
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
-		 				creq->data = (char *) malloc(creq->bytes);
+		 				creq->data = (char *) malloc(creq->bytes + 7);
 		 				
 		 			}
 		 			else{
@@ -363,15 +335,15 @@ ccache_resp_synth(creq_t *creq){
 				// Header should be: VALUE <key> <flags> <bytes> [<cas unique>]\r\n 
 				// Footer should be the data block
 				
-				creq->resp.header = (char * ) malloc(1<<8);		
-				creq->resp.footer = (char * ) malloc(creq->bytes);
+				creq->resp.header = (char * ) malloc(1<<8);	
+				creq->resp.footer = (char * ) malloc(creq->bytes + 3);
 				
 				
 
 				//only populate the fields if no errors were encountered
 				if(!creq->resp.errcode){
 					creq->resp.head_sz = snprintf(creq->resp.header, 1<<8, "VALUE %s %d %d \r\n", creq->key, creq->flags, creq->bytes);
-					creq->resp.foot_sz = snprintf(creq->resp.footer, creq->bytes, "%s\r\n", creq->data);
+					creq->resp.foot_sz = snprintf(creq->resp.footer, creq->bytes + 3, "%s\r\n", creq->data);
 				}
 
 				break;
