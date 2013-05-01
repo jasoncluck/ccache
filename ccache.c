@@ -96,23 +96,14 @@ ccache_get(creq_t *creq){
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
 		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
 		creq->resp.errcode = NOERROR;
-		creq_t * runner = cvect_list->head;
-		while(1){
-			if(!(strncmp(runner->key, creq->key, KEY_SIZE))) {
-				creq = runner; 
-				creq->type = CGET;
-
-				/* update global linked list */
-				//move the runner node to the front of the list
-				
-				break;
-			}
-			else if(runner->next == NULL) {
-				creq->resp.errcode = RERROR;
-				break;
-			} 
-			else runner = runner->next;
+		creq_t * head = cvect_list->head;
+		
+		if(!(strncmp(head->key, creq->key, KEY_SIZE))) {
+			creq = head; 
+			creq->type = CGET;
 		}
+		
+		
 	}
 	else{
 
@@ -156,29 +147,24 @@ ccache_set(creq_t *creq){
 	void *lookup_result;
 	if((lookup_result = do_lookups(&pairs[pairs_counter], dyn_vect)) != 0) //string exists
 	{ 
-		struct creq_linked_list *cvect_dll = (struct creq_linked_list *) lookup_result;
-		while(1){
-			if(!(strcmp(insert_dll->head->key, cvect_dll->head->key))) {
-				cvect_dll->head = insert_dll->head;
-				break;
-			}
-			if(cvect_dll->head->next == NULL){
-				add_creq(cvect_dll, insert_dll->head); //add the insert node to the end of the cvect's list
-				break;	
-			} 
-			else cvect_dll->head = cvect_dll->head->next;
+		//if the result already exists - delete the old one and add the new one
+		creq->resp.errcode = cvect_del(dyn_vect, pairs[pairs_counter].id);
+		if(creq->resp.errcode == NOERROR){
+			creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
 		}
-		//at this point head.next == null so set head.next to the insert node
 
 	}
 	else
 	{
 		//add the pair to the cvect
 		creq->resp.errcode = cvect_add_id(dyn_vect, pairs[pairs_counter].val, pairs[pairs_counter].id);
-		add_creq(lru_ll, creq);
+		if(lru_ll->tail == NULL) lru_ll->tail = creq;
+		else{
+			lru_ll->tail->next = creq;
+			lru_ll->tail = lru_ll->tail->next;
+		}
 
 	}	
-
 	assert(creq->resp.errcode == NOERROR); //if no errors: creq->resp.errcode == 0;
 	pairs_counter++;
 
@@ -270,10 +256,10 @@ ccache_req_parse(char *cmd){
 					}
 		 			else if(counter == 4){		 				
 		 				creq->bytes = atoi(pch);
-		 				creq->data = (char *) malloc(creq->bytes + 7);
+		 				creq->data = (char *) malloc(creq->bytes + 3);
 		 				while(creq->data == NULL){
 		 					remove_oldest_creq();
-		 					creq->data = (char *) malloc(creq->bytes + 7);
+		 					creq->data = (char *) malloc(creq->bytes + 3);
 
 		 				}
 		 				
