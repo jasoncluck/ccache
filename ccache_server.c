@@ -280,7 +280,7 @@ main (int argc, char *argv[])
 
                     /* Process the buffered request and write the results to the output */
 
-                    buf[strlen(buf)-1] = '\0'; //remove trailing newline
+                    buf[strlen(buf)-2] = '\0'; //remove trailing newline
 
                     if(data_flag && creq->resp.errcode == NOERROR){
                         data_flag = 0;
@@ -302,8 +302,6 @@ main (int argc, char *argv[])
                     ccmd_t type = get_creq_type(localbuf);
                     strcpy(localbuf, buf);
                     creq = (creq_t *) malloc(sizeof(creq_t));
-                    creq->resp.header = "";
-                    creq->resp.footer = "";
                     if(type == CSET) {
 
                         creq = ccache_req_parse(buf); //now process that actual buffer
