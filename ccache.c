@@ -94,14 +94,13 @@ ccache_get(creq_t *creq){
 	getpair.id = hashedkey;
 	void * lookup_result;
 	if((lookup_result = do_lookups(&getpair, dyn_vect)) != 0){
-		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; 
-		creq->resp.errcode = NOERROR;
-		creq_t * head = cvect_list->head;
+		creq_t *get_creq = (creq_t *) lookup_result;
 		
-		if(!(strncmp(head->key, creq->key, KEY_SIZE))) {
-			creq = head; 
+		if(!(strncmp(get_creq->key, creq->key, KEY_SIZE))) {
+			creq = get_creq; 
 			creq->type = CGET;
 		}
+		else creq->resp.errcode = RERROR;
 		
 		
 	}
@@ -123,25 +122,15 @@ ccache_set(creq_t *creq){
 
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
-	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	pairs[pairs_counter].val = malloc(sizeof(creq_t)); //malloc space for the pointer to the node object
 	
 
 	while(pairs[pairs_counter].val == NULL){
 	 	remove_oldest_creq();
-	 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	 	pairs[pairs_counter].val = malloc(sizeof(creq_t)); //malloc space for the pointer to the node object
 	}
-	//init linked lists, one for inserting the node, one for the cvect to map to
-	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
-	init_linked_list(insert_dll);
-
-	while(insert_dll == NULL){
-	 	remove_oldest_creq();
-	 	insert_dll = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
-	 	init_linked_list(insert_dll);
-	}
-
-	add_creq(insert_dll, creq);
-	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
+	
+	memcpy(&pairs[pairs_counter].val, &creq, sizeof(creq_t)); //store the linked list in the cvect
 
 	/* check to see if this key already exists, if it doesn't: add it. If it does exist, resolve linked node collision */
 	void *lookup_result;
