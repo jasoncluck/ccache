@@ -9,6 +9,9 @@ struct creq_linked_list {
 	creq_t * tail;
 };
 
+void
+init_linked_list(struct creq_linked_list *dll);
+
 int
 add_creq(struct creq_linked_list * dll, creq_t * new_creq);
 

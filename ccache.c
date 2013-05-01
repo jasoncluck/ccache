@@ -49,6 +49,8 @@ ccache_init(void){
 	cvect_init(dyn_vect);
 	lru_ll = malloc(sizeof(struct creq_linked_list));
 	if(lru_ll == NULL) exit(1);
+	init_linked_list(lru_ll);
+	
 	return dyn_vect;
 }
 
@@ -103,8 +105,6 @@ ccache_get(creq_t *creq){
 				/* update global linked list */
 				//move the runner node to the front of the list
 				
-
-
 				break;
 			}
 			else if(runner->next == NULL) {
@@ -133,18 +133,21 @@ ccache_set(creq_t *creq){
 	/* create the new pair and the new node that is the pairs value */
 	pairs[pairs_counter].id = hashedkey; //set the id to be the key returned from the hash function
 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	
+
 	while(pairs[pairs_counter].val == NULL){
 	 	remove_oldest_creq();
 	 	pairs[pairs_counter].val = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
-
 	}
 	//init linked lists, one for inserting the node, one for the cvect to map to
 	struct creq_linked_list *insert_dll = malloc(sizeof(struct creq_linked_list));
+	init_linked_list(insert_dll);
+
 	while(insert_dll == NULL){
 	 	remove_oldest_creq();
 	 	insert_dll = malloc(sizeof(struct creq_linked_list)); //malloc space for the pointer to the node object
+	 	init_linked_list(insert_dll);
 	}
-
 
 	add_creq(insert_dll, creq);
 	memcpy(&pairs[pairs_counter].val, &insert_dll, sizeof(struct creq_linked_list)); //store the linked list in the cvect
@@ -193,30 +196,13 @@ ccache_delete(creq_t *creq){
 	long hashedkey = hash(creq->key);
 	delete_pair.id = hashedkey;	
 
-	void * lookup_result;
-	if((lookup_result = do_lookups(&delete_pair, dyn_vect)) != 0){
-		struct creq_linked_list *cvect_list = (struct creq_linked_list *) lookup_result; //if non-zero we can typecast this without seg faulting	
+	if(do_lookups(&delete_pair, dyn_vect)){
 		creq->resp.errcode = NOERROR;
 
-		//check the first node
-		if(!(strcmp(cvect_list->head->key, creq->key))){
-			//if there is nothing after the first node, just delete the whole cvect bucket
-			if(cvect_list->head->next == NULL){
-				creq->resp.errcode = cvect_del(dyn_vect, delete_pair.id);	
-				if(creq->resp.errcode == NOERROR){
-					pairs_counter--;	
-				} 
-			} 
-			else{
-				//if there is another node after the first one - have to change the cvect pointer. also get rid of cvect_list->head's data
-				memcpy(cvect_list->head, cvect_list->head->next, sizeof(creq_t));
-
-				free(cvect_list->head->next);
-			}			
-		}
-		else{
-			creq->resp.errcode = delete_creq(cvect_list, creq);
-		}
+		creq->resp.errcode = cvect_del(dyn_vect, delete_pair.id);	
+		if(creq->resp.errcode == NOERROR){
+			pairs_counter--;	
+		} 
 	}		
 	else{
 		//Data not found in cvect, return error
@@ -241,7 +227,8 @@ ccache_req_parse(char *cmd){
 		remove_oldest_creq();
 		creq = (creq_t *) malloc(sizeof(creq_t));
 	}
-	
+	creq->type = INVALID;
+	creq->resp.errcode = NOERROR;
 	char * pch;
 	pch = strtok(cmd, " ");
 	int counter = 0;
@@ -298,7 +285,6 @@ ccache_req_parse(char *cmd){
 				case CDELETE:
 					break;
 				default:
-					printf("Invalid command type");
 					break;
 			}
 		}
@@ -308,6 +294,9 @@ ccache_req_parse(char *cmd){
 		//TODO: Now call ccache_req_process(creq_t *r) to fill in the data portion and the rest of the struct
 	}
 
+	if(creq->type == INVALID || counter == 0){
+		creq->resp.errcode = ERROR;
+	}
 
 	/* check counter for the type - client errors */
 	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
@@ -324,7 +313,6 @@ ccache_req_parse(char *cmd){
 	else{
 		/* Now that the tokens are done - continue the processing by calling the respective functions */
 		if(creq->type == CGET){
-
 			creq = ccache_get(creq);
 		}
 		else if(creq->type == CSET) {
@@ -340,10 +328,10 @@ ccache_req_parse(char *cmd){
 creq_t *
 ccache_resp_synth(creq_t *creq){
 	if(creq->resp.errcode > 0 && creq->resp.errcode < 3){
-		creq->resp.header = (char * ) malloc(16); //send errcode as a header - looks the same to the client
+		creq->resp.header = (char * ) malloc(128); //send errcode as a header - looks the same to the client
 		while(creq->resp.header == NULL){
 			remove_oldest_creq();
-			creq->resp.header = (char *) malloc(16);
+			creq->resp.header = (char *) malloc(128);
 		}
 		switch(creq->resp.errcode){
 			case ERROR: 
@@ -367,7 +355,7 @@ ccache_resp_synth(creq_t *creq){
 				while(creq->resp.header == NULL){
 					remove_oldest_creq();
 					creq->resp.header = (char *) malloc(16);
-				}				
+				}
 				if(creq->resp.errcode == NOERROR) creq->resp.head_sz = sprintf(creq->resp.header, "STORED\r\n");
 				else if(creq->resp.errcode == RERROR) creq->resp.head_sz = sprintf(creq->resp.header, "NOT_STORED\r\n");
 				creq->resp.footer = "";
@@ -387,6 +375,7 @@ ccache_resp_synth(creq_t *creq){
 					remove_oldest_creq();
 					creq->resp.footer = (char *) malloc(creq->bytes + 3);
 				}
+
 				
 				
 

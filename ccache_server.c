@@ -18,7 +18,7 @@
 #include <ccache.h>
 #include <creq.h>
 
-#define MAXEVENTS 64
+#define MAXEVENTS 1024
 #define BUFFER_SIZE 512
 
 creq_t *creq;
@@ -33,10 +33,10 @@ get_creq_type(char *buf){
     char * pch;
     ccmd_t type;
     pch = strtok(buf, " ");
-    
+    if(pch == NULL) type = INVALID;
     
     /* first ind out what command the first token is */
-    if(strcmp(pch, "get") == 0) type = CGET;
+    else if(strcmp(pch, "get") == 0) type = CGET;
     else if( strcmp(pch, "set") == 0) type = CSET;
     else if(strcmp(pch, "delete") == 0) type = CDELETE;
     else type = INVALID;
@@ -302,6 +302,8 @@ main (int argc, char *argv[])
                     ccmd_t type = get_creq_type(localbuf);
                     strcpy(localbuf, buf);
                     creq = (creq_t *) malloc(sizeof(creq_t));
+                    creq->resp.header = "";
+                    creq->resp.footer = "";
                     if(type == CSET) {
 
                         creq = ccache_req_parse(buf); //now process that actual buffer
@@ -351,11 +353,6 @@ main (int argc, char *argv[])
 
                         /* Write Header and Footer to socket */
                         if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
-
-                        if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-                            if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
-                            
-                        }
                     }
                     else{
                         printf("error! exiting\n");
