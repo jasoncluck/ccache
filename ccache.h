@@ -51,7 +51,7 @@ hash(char *str);
 
 /* Function to parse the string and put it into the structure above */
 creq_t *
-ccache_req_parse(char *cmd);
+ccache_req_parse(char *cmd, creq_t *creq);
 
 
 /* Populate the data, flags, and bytes */

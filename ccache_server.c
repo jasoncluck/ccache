@@ -21,29 +21,8 @@
 #define MAXEVENTS 1024
 #define BUFFER_SIZE 512
 
-creq_t *creq;
+
 int data_flag = 0;
-
-
-/* Check to see if the request is actually complete. Also handles special cases
-depending on the command issued.*/
-ccmd_t
-get_creq_type(char *buf){
-    /* first find out how many tokens there are in the command */
-    char * pch;
-    ccmd_t type;
-    pch = strtok(buf, " ");
-    if(pch == NULL) type = INVALID;
-    
-    /* first ind out what command the first token is */
-    else if(strcmp(pch, "get") == 0) type = CGET;
-    else if( strcmp(pch, "set") == 0) type = CSET;
-    else if(strcmp(pch, "delete") == 0) type = CDELETE;
-    else type = INVALID;
-    
-    return type;
-}
-
 
 static int
 create_and_bind (char *port)
@@ -282,49 +261,36 @@ main (int argc, char *argv[])
 
                     buf[strlen(buf)-2] = '\0'; //remove trailing newline
 
-                    if(data_flag && creq->resp.errcode == NOERROR){
-                        data_flag = 0;
-                        strcpy(creq->data, buf);
-                        
+                    /* Make sure this request is complete - can do special handling based on creq_type then */
+                    strcpy(localbuf, buf);
+                    creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
+                    creq = ccache_req_parse(buf, creq);
+                    if(creq->resp.errcode != NOERROR) ccache_resp_synth(creq);
+
+                    if(creq->type == CSET) {
+
+                        creq = ccache_req_parse(buf, creq); //now process that actual buffer
+                                                
                         creq = ccache_set(creq);
                         if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
 
-                        if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
-                            if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
-                        }
-
-                        break;
-                    }
-
-
-                    /* Make sure this request is complete - can do special handling based on creq_type then */
-                    strcpy(localbuf, buf);
-                    ccmd_t type = get_creq_type(localbuf);
-                    strcpy(localbuf, buf);
-                    creq = (creq_t *) malloc(sizeof(creq_t));
-                    if(type == CSET) {
-
-                        creq = ccache_req_parse(buf); //now process that actual buffer
-                        data_flag = 1;
-                        if((s = write (events[i].data.fd, "", 1)) == -1) goto write_error;
-
-                        
                     }
                     /* CGET */
-                    else if(type == CGET){
+                    else if(creq->type == CGET){
                         /* split multiple requests into single requests and process them */
                         char * pch;
                         int counter = 0;
                         pch = strtok(localbuf, " ");
+                        creq_t *get_creq = (creq_t *) malloc(sizeof(creq_t));
+                        if(get_creq == NULL){
+                          remove_oldest_creq();
+                          get_creq = (creq_t *) malloc(sizeof(creq_t));
+                        }
                         while(pch != NULL){
                             
                             if(counter != 0){
                                 /* formulate this new request and then skip the parsing step */
-                                creq_t *get_creq = (creq_t *) malloc(sizeof(creq_t));
-                                if(get_creq == NULL){
-                                  remove_oldest_creq();
-                                  get_creq = (creq_t *) malloc(sizeof(creq_t));
-                                }
+                                
                                 strcpy(get_creq->key, pch);
                                 get_creq->type = CGET;
 
@@ -337,18 +303,19 @@ main (int argc, char *argv[])
                                 if(creq->resp.errcode == RERROR || creq->resp.errcode == 0){
                                     if((s = write (events[i].data.fd, creq->resp.footer, strlen(creq->resp.footer))) == -1) goto write_error;
                                 }
-                                free(get_creq);
+                               
                             }
                             pch = strtok(NULL, " ");
                             counter++;
+
                         }
+                         free(get_creq);
                         /* now that we're done transmitting all the CGET reqs - transmit END */
                         if((s = write (events[i].data.fd, "END\r\n", strlen("END\r\n"))) == -1) goto write_error;
                     }
-                    else if(type == CDELETE || type == INVALID){
+                    else if(creq->type == CDELETE || creq->type == INVALID){
 
-                        creq = ccache_req_parse(buf); //now process that actual buffer
-
+                        creq = ccache_delete(creq);
                         /* Write Header and Footer to socket */
                         if((s = write (events[i].data.fd, creq->resp.header, strlen(creq->resp.header))) == -1) goto write_error;
                     }

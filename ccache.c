@@ -117,7 +117,6 @@ ccache_get(creq_t *creq){
 
 creq_t *
 ccache_set(creq_t *creq){
-
 	long hashedkey = hash(creq->key);
 
 	/* create the new pair and the new node that is the pairs value */
@@ -193,19 +192,14 @@ ccache_delete(creq_t *creq){
 //Commands look like: <command name> <key> <flags> <exptime> <bytes> [noreply]\r\n
 /* Function to parse the string and put it into the structure above */
 creq_t *
-ccache_req_parse(char *cmd){
+ccache_req_parse(char *cmd, creq_t *creq){
 	//Command is passed as a string along with its length
 	//Can start by tokenizing this data, and determining what type of command it is.
 
-	creq_t *creq = (creq_t *) malloc(sizeof(creq_t));
-	while(creq == NULL){
-		remove_oldest_creq();
-		creq = (creq_t *) malloc(sizeof(creq_t));
-	}
-	creq->type = INVALID;
-	creq->resp.errcode = NOERROR;
+	
+	
 	char * pch;
-	pch = strtok(cmd, " ");
+	pch = strtok(cmd, "\r\n ");
 	int counter = 0;
 	creq->resp.errcode = NOERROR;
 	
@@ -243,15 +237,13 @@ ccache_req_parse(char *cmd){
 		 			else if(counter == 3){						
 		 				creq->exp_time = atoi(pch);
 					}
-		 			else if(counter == 4){		 				
+		 			else if(counter == 4){
+
 		 				creq->bytes = atoi(pch);
 		 				creq->data = (char *) malloc(creq->bytes + 3);
-		 				while(creq->data == NULL){
-		 					remove_oldest_creq();
-		 					creq->data = (char *) malloc(creq->bytes + 3);
-
-		 				}
-		 				
+		 			}
+		 			else if(counter == 5){
+		 				strcpy(creq->data, pch);
 		 			}
 		 			else{
 		 				break;
@@ -274,7 +266,7 @@ ccache_req_parse(char *cmd){
 	}
 
 	/* check counter for the type - client errors */
-	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 5 )
+	if((creq->type == CGET && counter <= 1) || (creq->type == CSET && counter != 6 )
 		|| (creq->type == CDELETE && counter != 2)){
 		creq->resp.errcode = CERROR;
 	}
@@ -285,18 +277,7 @@ ccache_req_parse(char *cmd){
 
 		//ccache_resp_send(creq);
 	}
-	else{
-		/* Now that the tokens are done - continue the processing by calling the respective functions */
-		if(creq->type == CGET){
-			creq = ccache_get(creq);
-		}
-		else if(creq->type == CSET) {
-			creq = ccache_set(creq);
-		}
-		else if(creq->type == CDELETE){ 
-			creq = ccache_delete(creq);
-		}
-	}
+	
 	return creq;
 }
 
